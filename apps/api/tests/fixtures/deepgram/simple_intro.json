@@ -1,0 +1,50 @@
+{
+  "name": "simple_intro",
+  "notes": "Host says 'Please welcome Sarah Tan.' Two is_final segments, endpoint via speech_final on the second.",
+  "timeout_s": 1.2,
+  "audio_epoch": 1,
+  "steps": [
+    {"at": 0.30, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 0.0, "duration": 0.30,
+      "is_final": false, "speech_final": false,
+      "channel": {"alternatives": [{"transcript": "please", "confidence": 0.72, "words": []}]}
+    }},
+    {"at": 0.60, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 0.0, "duration": 0.60,
+      "is_final": false, "speech_final": false,
+      "channel": {"alternatives": [{"transcript": "please welcome", "confidence": 0.81, "words": []}]}
+    }},
+    {"at": 1.00, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 0.0, "duration": 0.90,
+      "is_final": true, "speech_final": false,
+      "channel": {"alternatives": [{
+        "transcript": "please welcome", "confidence": 0.94,
+        "words": [
+          {"word": "please",  "start": 0.10, "end": 0.40, "confidence": 0.95},
+          {"word": "welcome", "start": 0.45, "end": 0.90, "confidence": 0.93}
+        ]
+      }]}
+    }},
+    {"at": 1.40, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 1.10, "duration": 0.30,
+      "is_final": false, "speech_final": false,
+      "channel": {"alternatives": [{"transcript": "sarah", "confidence": 0.66, "words": []}]}
+    }},
+    {"at": 1.90, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 1.10, "duration": 0.80,
+      "is_final": true, "speech_final": true,
+      "channel": {"alternatives": [{
+        "transcript": "Sarah Tan.", "confidence": 0.96,
+        "words": [
+          {"word": "sarah", "punctuated_word": "Sarah", "start": 1.10, "end": 1.45, "confidence": 0.95},
+          {"word": "tan",   "punctuated_word": "Tan.",  "start": 1.55, "end": 1.90, "confidence": 0.97}
+        ]
+      }]}
+    }}
+  ]
+}
