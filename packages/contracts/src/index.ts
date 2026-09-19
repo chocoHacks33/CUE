@@ -59,3 +59,5 @@ export function isCameraId(value: string): value is CameraId {
 export function mayPublishMicrophone(cameraId: CameraId): boolean {
   return CAMERA_CONTRACTS[cameraId].audioPolicy === "MASTER";
 }
+
+export * from "./vision";
