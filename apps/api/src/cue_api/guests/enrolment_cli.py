@@ -161,6 +161,71 @@ def _forget_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _evaluate_command(args: argparse.Namespace) -> int:
+    """Tally trials a human actually ran into the identity report's numbers.
+
+    Exits non-zero when the run does not support a claim, so a green terminal
+    can never be mistaken for measured accuracy.
+    """
+    from cue_api.guests.identity_eval import (
+        InsufficientEvidence,
+        LabelledPair,
+        NegativeTrial,
+        PositiveTrial,
+        recommend_accept_similarity,
+        summarise,
+        summary_lines,
+    )
+
+    document = json.loads(Path(args.trials).read_text("utf-8"))
+    positives = [
+        PositiveTrial(
+            guest_id=row["guestId"],
+            named_guest_id=row.get("namedGuestId"),
+            status=row.get("status", ""),
+            ms_to_confirmed=row.get("msToConfirmed"),
+        )
+        for row in document.get("positives", [])
+    ]
+    negatives = [
+        NegativeTrial(
+            subject=row["subject"],
+            named_guest_id=row.get("namedGuestId"),
+            status=row.get("status", ""),
+        )
+        for row in document.get("negatives", [])
+    ]
+
+    report = summarise(positives, negatives)
+    for line in summary_lines(report):
+        print(line)
+
+    pairs = [
+        LabelledPair(similarity=float(row["similarity"]), same_person=bool(row["samePerson"]))
+        for row in document.get("pairs", [])
+    ]
+    if pairs:
+        print()
+        try:
+            recommendation = recommend_accept_similarity(pairs)
+        except InsufficientEvidence as error:
+            print(f"threshold:    not recommended - {error}")
+        else:
+            print(
+                f"threshold:    {recommendation.accept_similarity:.4f} "
+                f"(worst stranger {recommendation.highest_negative_similarity:.4f}, "
+                f"measured on {recommendation.positives_measured} positive / "
+                f"{recommendation.negatives_measured} negative pairs)"
+            )
+            print(f"              {recommendation.note}")
+
+    if not report.claimable:
+        print()
+        print("This run does not support an accuracy claim.", file=sys.stderr)
+        return 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cue-guests", description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -193,6 +258,16 @@ def build_parser() -> argparse.ArgumentParser:
     add_backend_arguments(forget)
     forget.add_argument("--guest-id", help="omit to purge every guest for the event")
     forget.set_defaults(handler=_forget_command)
+
+    evaluate = subparsers.add_parser(
+        "evaluate", help="tally identity trials into the report's numbers"
+    )
+    evaluate.add_argument(
+        "--trials",
+        required=True,
+        help="JSON with positives/negatives, and optional labelled similarity pairs",
+    )
+    evaluate.set_defaults(handler=_evaluate_command)
 
     return parser
 

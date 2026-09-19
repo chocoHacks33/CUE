@@ -107,8 +107,9 @@ drawn faces cannot validate the thresholds.
 ## Not in scope here
 
 - **Fitting a measured calibration.** `Calibration.confidence()` and the
-  provisional anchor are here; `Calibration.fit()` is Stage 3 and is not. Until
-  someone fits one on a held-out set, `MEASURED` is unreachable by construction.
+  provisional anchor are here; `Calibration.fit()` arrives with
+  [b-stage-3-prep.md](b-stage-3-prep.md). Until someone fits one on a held-out
+  set of real captures, `MEASURED` stays unreachable in practice.
 - **Producer-UI evidence semantics** (`evidence.ts`) — Stage 3.
 - **Group framing.** B reports each face separately; deciding that "Sarah and
   Daniel" needs a wide shot is C's policy, using B's per-face observations.
