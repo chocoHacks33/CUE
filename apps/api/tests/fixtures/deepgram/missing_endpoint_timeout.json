@@ -1,0 +1,33 @@
+{
+  "name": "missing_endpoint_timeout",
+  "notes": "Deepgram never sends speech_final or UtteranceEnd. Speech resumes >1.2s after the last is_final, so the assembler flushes on timeout before processing the resumed interim.",
+  "timeout_s": 1.2,
+  "audio_epoch": 1,
+  "steps": [
+    {"at": 0.30, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 0.0, "duration": 0.30,
+      "is_final": false, "speech_final": false,
+      "channel": {"alternatives": [{"transcript": "sarah", "confidence": 0.71, "words": []}]}
+    }},
+    {"at": 0.90, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 0.0, "duration": 0.90,
+      "is_final": true, "speech_final": false,
+      "channel": {"alternatives": [{
+        "transcript": "Sarah joins us.", "confidence": 0.94,
+        "words": [
+          {"word": "sarah", "punctuated_word": "Sarah", "start": 0.10, "end": 0.45, "confidence": 0.95},
+          {"word": "joins", "punctuated_word": "joins", "start": 0.50, "end": 0.75, "confidence": 0.92},
+          {"word": "us",    "punctuated_word": "us.",   "start": 0.80, "end": 0.90, "confidence": 0.94}
+        ]
+      }]}
+    }},
+    {"at": 3.20, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 3.00, "duration": 0.20,
+      "is_final": false, "speech_final": false,
+      "channel": {"alternatives": [{"transcript": "how are", "confidence": 0.62, "words": []}]}
+    }}
+  ]
+}

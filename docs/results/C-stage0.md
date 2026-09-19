@@ -14,7 +14,7 @@ _Owner: role C (speech, context, policy). Branch `person-c-stage-0`, branched fr
 | Contracts proposal to A | JSON Schemas + fixtures for `Cue` / `Decision` / `State` | `docs/contracts-proposal/` | Six/four/four fixtures each; every fixture validates against its type. A owns `packages/contracts/`; this is a proposal. |
 | Ops smoke | Verifies both keys and hits each provider once | `scripts/smoke_api.py` | Never prints a key; exits non-zero on any failure. |
 
-Team decision recorded: `CUE_PROVIDER=openai` is the sole semantic interpreter for the runtime. `.env.example` documents the constraint. No Ollama code exists in the repo; do not add any.
+**Provider policy (updated).** OpenAI stays the production runtime and the default: `CUE_PROVIDER=openai` in `.env.example`, `parse()` targets the OpenAI SDK, and release-gate measurements are always on the pinned OpenAI model. Ollama is a **dev-only fallback** used when the OpenAI key is temporarily unavailable to a teammate (the shared key currently lives on A's machine); it is not a supported production interpreter and it does not participate in the release gate. Any Ollama-branching code lives outside the release path — see `scripts/smoke_api.py` on the `person-c-booth-demo` branch for the dev-only reachability check.
 
 ## Run commands (from `apps/api`'s venv)
 
