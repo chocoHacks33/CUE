@@ -227,6 +227,19 @@ def decide(
     # 7. Pick a healthy camera showing target (with fresh identity, or role_map).
     picked, why = _pick_named(target, cameras, role_based, role_map)
     if picked:
+        # Guest-ready gate: even a valid identity match cannot TAKE the guest
+        # camera until the producer/B has marked the guest ready to be on
+        # screen. Default True keeps existing callers unaffected.
+        if cameras.get(picked, {}).get("guest_ready", True) is False:
+            wide = _healthy_wide(cameras)
+            if wide:
+                return _propose_take(
+                    wide, "guest not ready", cameras, state, cue, now,
+                )
+            return Decision(
+                DecisionAction.SLATE, None,
+                "guest not ready; no healthy wide -> slate",
+            )
         return _propose_take(picked, why, cameras, state, cue, now)
 
     # 8. Fall back to wide, else SLATE.
