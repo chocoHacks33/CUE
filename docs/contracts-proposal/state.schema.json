@@ -1,0 +1,70 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cue.local/schemas/state.schema.json",
+  "title": "State",
+  "description": "C-lane proposal to A for packages/contracts. Caller-owned decision context threaded across director.decide() calls. Extends the four fields the v3 plan lists (current camera, last cut time, mode, hold_until) with last_utterance_id, which lets the correction override remain a pure function.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["current_camera", "last_cut_time", "mode", "hold_until", "last_utterance_id"],
+  "$defs": {
+    "Mode": {
+      "type": "string",
+      "enum": ["AUTO", "ASSIST", "HOLD"],
+      "description": "AUTO: policy may TAKE. ASSIST: policy proposes; producer confirms. HOLD: policy blocks all AI TAKEs; safety failover still applies."
+    }
+  },
+  "properties": {
+    "current_camera": {
+      "type": ["string", "null"],
+      "description": "Camera_id currently live. Null before the first TAKE."
+    },
+    "last_cut_time": {
+      "type": "number",
+      "description": "Producer clock seconds of the last successful TAKE. Used to enforce MIN_SHOT_S (2.5s)."
+    },
+    "mode": {"$ref": "#/$defs/Mode"},
+    "hold_until": {
+      "type": ["number", "null"],
+      "description": "If non-null and now < hold_until, TAKEs are blocked as if mode were HOLD. Used for the '5s manual hold after keypress' pattern."
+    },
+    "last_utterance_id": {
+      "type": "string",
+      "default": "",
+      "description": "utterance_id of the cue that drove the last TAKE. When the incoming cue shares this id, the min-shot gate is bypassed for one re-cut."
+    }
+  },
+  "examples": [
+    {
+      "_fixture": "fresh_auto",
+      "current_camera": null,
+      "last_cut_time": 0.0,
+      "mode": "AUTO",
+      "hold_until": null,
+      "last_utterance_id": ""
+    },
+    {
+      "_fixture": "manual_hold_indefinite",
+      "current_camera": "CAM-HOST",
+      "last_cut_time": 1758291180.00,
+      "mode": "HOLD",
+      "hold_until": null,
+      "last_utterance_id": "utt-40"
+    },
+    {
+      "_fixture": "manual_hold_timer",
+      "current_camera": "CAM-HOST",
+      "last_cut_time": 1758291200.00,
+      "mode": "AUTO",
+      "hold_until": 1758291205.00,
+      "last_utterance_id": "utt-41"
+    },
+    {
+      "_fixture": "post_named_take",
+      "current_camera": "CAM-GUEST",
+      "last_cut_time": 1758291234.20,
+      "mode": "AUTO",
+      "hold_until": null,
+      "last_utterance_id": "utt-42"
+    }
+  ]
+}

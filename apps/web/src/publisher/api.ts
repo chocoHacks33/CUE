@@ -29,6 +29,9 @@ export async function requestPublisherToken(
       headers: {
         "Content-Type": "application/json",
         "X-CUE-Bootstrap-Secret": bootstrapSecret,
+        // Free ngrok tunnels return an HTML interstitial to browser requests
+        // unless this header is present. Harmless for every other endpoint.
+        "ngrok-skip-browser-warning": "1",
       },
       body: JSON.stringify(request),
       signal,

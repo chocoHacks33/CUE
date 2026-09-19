@@ -260,3 +260,190 @@ footer {
     min-height: 280px;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Producer receiver (Person D's Mac)
+   --------------------------------------------------------------------------- */
+
+.producer-grid {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.7fr) minmax(400px, 1.6fr);
+  gap: 18px;
+}
+
+.stack {
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+
+.slots {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.slot {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #28314b;
+  border-radius: 16px;
+  padding: 14px;
+  background: #0a0f1d;
+}
+
+.slot-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.slot-heading h3 {
+  margin: 2px 0 0;
+  font-size: 1.05rem;
+}
+
+.badges {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+}
+
+.badge {
+  border: 1px solid #3b445f;
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: #c7cee2;
+  font-size: 0.66rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.badge-waiting,
+.badge-not-applicable {
+  opacity: 0.6;
+}
+
+.badge-publisher-connected,
+.badge-subscribing {
+  border-color: rgba(255, 196, 77, 0.5);
+  color: #ffd27a;
+  background: rgba(255, 196, 77, 0.08);
+}
+
+.badge-video-ready,
+.badge-audio-ready {
+  border-color: rgba(56, 224, 158, 0.45);
+  color: #71f0ba;
+  background: rgba(56, 224, 158, 0.09);
+}
+
+.badge-stalled,
+.badge-playback-blocked {
+  border-color: rgba(255, 93, 88, 0.45);
+  color: #ffaaa7;
+  background: rgba(255, 93, 88, 0.08);
+}
+
+.slot-video {
+  position: relative;
+  display: grid;
+  aspect-ratio: 16 / 9;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 12px;
+  color: #68718a;
+  background: #02040a;
+  font-size: 0.8rem;
+  text-align: center;
+}
+
+/* Receiver tiles are never mirrored: the operator must see the image as the audience would. */
+.slot-video video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.slot-video-ready .slot-video {
+  outline: 2px solid rgba(56, 224, 158, 0.35);
+}
+
+.slot-stalled .slot-video {
+  outline: 2px solid rgba(255, 93, 88, 0.6);
+}
+
+.warning {
+  color: #ffd27a;
+}
+
+.error-text {
+  color: #ffaaa7;
+}
+
+.status-connected,
+.status-stopped {
+  border-color: rgba(56, 224, 158, 0.45);
+  color: #71f0ba;
+  background: rgba(56, 224, 158, 0.09);
+}
+
+.status-recording,
+.status-reconnecting,
+.status-connecting,
+.status-requesting-token {
+  border-color: rgba(255, 196, 77, 0.5);
+  color: #ffd27a;
+}
+
+.log {
+  margin: 0;
+  max-height: 260px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: 12px;
+  background: #0a0f1d;
+  color: #b9c0d4;
+  font: 0.74rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+  white-space: pre-wrap;
+}
+
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.checkbox input {
+  width: auto;
+}
+
+.playback video {
+  width: 100%;
+  border-radius: 12px;
+  background: #02040a;
+}
+
+.unassigned {
+  margin: 0;
+  padding-left: 18px;
+  color: #ffd27a;
+  font-size: 0.82rem;
+}
+
+@media (max-width: 1000px) {
+  .producer-grid,
+  .slots {
+    grid-template-columns: 1fr;
+  }
+}
