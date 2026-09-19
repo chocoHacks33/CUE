@@ -35,6 +35,7 @@ from cue_api.policy.log import (  # noqa: E402
     record_from_session_decision,
 )
 from cue_api.policy.session import DirectorSession  # noqa: E402
+from cue_api.policy.wire import to_wire  # noqa: E402
 from cue_api.semantics.parser import (  # noqa: E402
     Action,
     Cue,
@@ -94,14 +95,19 @@ def _considered(cams: dict, picked_id: str | None) -> list[CameraConsideration]:
     return out
 
 
-def _emit(logger: DecisionLogger | None, record) -> None:
-    line = record.to_json()
+def _emit(logger: DecisionLogger | None, record, *, wire_format: bool = True) -> None:
+    if wire_format:
+        # Adapt into A's transport shape (camelCase, contractVersion, FIXTURE tag).
+        event = to_wire(record, source_override="FIXTURE")
+        line = event.model_dump_json(by_alias=True)
+    else:
+        line = record.to_json()
     print(line)
     if logger is not None:
         logger.append(record)
 
 
-def run(logger: DecisionLogger | None = None) -> int:
+def run(logger: DecisionLogger | None = None, *, wire_format: bool = True) -> int:
     session = DirectorSession(current_camera="CAM-HOST")
     t = 1_000.0
 
@@ -119,7 +125,7 @@ def run(logger: DecisionLogger | None = None) -> int:
         cameras_considered=_considered(_cams(), d.camera_id),
         latencies_ms={"asr": 320, "cue": 850, "decide": 1, "total": 1171},
         source="FIXTURE",
-    ))
+    ), wire_format=wire_format)
 
     # Step 2: immediate intro
     t += 3.0
@@ -135,7 +141,7 @@ def run(logger: DecisionLogger | None = None) -> int:
         cameras_considered=_considered(_cams(), d.camera_id),
         latencies_ms={"asr": 305, "cue": 820, "decide": 1, "total": 1126},
         source="FIXTURE",
-    ))
+    ), wire_format=wire_format)
     session.on_ack(d.decision_seq, applied=True, now=t + 0.05)
 
     # Step 3: guest camera covered mid-utterance -> WIDE fallback
@@ -153,7 +159,7 @@ def run(logger: DecisionLogger | None = None) -> int:
         cameras_considered=_considered(covered, d.camera_id),
         latencies_ms={"asr": 310, "cue": 780, "decide": 1, "total": 1091},
         source="FIXTURE",
-    ))
+    ), wire_format=wire_format)
     session.on_ack(d.decision_seq, applied=True, now=t + 0.05)
 
     # Step 4: manual HOLD
@@ -163,7 +169,7 @@ def run(logger: DecisionLogger | None = None) -> int:
         d, at=t, cue=None,
         cameras_considered=[], latencies_ms={"decide": 0, "total": 0},
         source="FIXTURE",
-    ))
+    ), wire_format=wire_format)
 
     # Step 5: late cue interpreted BEFORE the HOLD (older mode_revision)
     t += 0.05
@@ -180,7 +186,7 @@ def run(logger: DecisionLogger | None = None) -> int:
         cameras_considered=_considered(_cams(), d.camera_id),
         latencies_ms={"asr": 305, "cue": 5200, "decide": 0, "total": 5505},
         source="FIXTURE",
-    ))
+    ), wire_format=wire_format)
 
     # Step 6: RESUME_AUTO, then correction utterance
     t += 1.0
@@ -189,7 +195,7 @@ def run(logger: DecisionLogger | None = None) -> int:
         d, at=t, cue=None,
         cameras_considered=[], latencies_ms={"decide": 0, "total": 0},
         source="FIXTURE",
-    ))
+    ), wire_format=wire_format)
 
     t += 2.6
     # Correction: assembler combined both halves into one final utterance;
@@ -206,7 +212,7 @@ def run(logger: DecisionLogger | None = None) -> int:
         cameras_considered=_considered(_cams(), d.camera_id),
         latencies_ms={"asr": 340, "cue": 890, "decide": 1, "total": 1231},
         source="FIXTURE",
-    ))
+    ), wire_format=wire_format)
     session.on_ack(d.decision_seq, applied=True, now=t + 0.05)
     return 0
 
@@ -215,12 +221,15 @@ def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(description="C-lane fixture replay.")
     ap.add_argument("--out", metavar="PATH",
                     help="append JSON Lines to this file in addition to stdout.")
+    ap.add_argument("--format", choices=("wire", "raw"), default="wire",
+                    help="wire: A's control-transport shape (camelCase, "
+                         "contractVersion, source=FIXTURE); raw: DecisionRecord.")
     args = ap.parse_args(argv)
     logger = DecisionLogger(args.out) if args.out else None
     # Deliberately do not consult wall time; each record's `at` field is
     # scripted so replays are byte-identical.
     _ = time  # keep import intentional (available for callers who want live wall time)
-    return run(logger=logger)
+    return run(logger=logger, wire_format=(args.format == "wire"))
 
 
 if __name__ == "__main__":
