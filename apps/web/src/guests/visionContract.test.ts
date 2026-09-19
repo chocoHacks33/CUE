@@ -1,8 +1,7 @@
 /**
  * The TypeScript half of the shared fixture check.
  *
- * These are the same bytes `apps/api/tests/test_guest_contracts.py` and
- * `apps/vision/tests/test_observation_contract.py` validate.
+ * These are the same bytes `apps/api/tests/test_guest_contracts.py` validates.
  */
 import { parseGuestRecord, parseVisualObservation, supportsNamedTake } from "@cue/contracts";
 import { describe, expect, it } from "vitest";

@@ -49,8 +49,8 @@ and an unknown face stays unknown. See [docs/guest-privacy.md](docs/guest-privac
 [docs/stage-1-b-handoff.md](docs/stage-1-b-handoff.md).
 
 ```bash
-python -m pip install -e "apps/vision[dev]"        # core, no OpenCV needed
-python -m pip install -e "apps/vision[opencv,dev]" # plus live inference
+python -m pip install -e "apps/api[dev]"           # core, no OpenCV needed
+python -m pip install -e "apps/api[vision,dev]"    # plus live inference
 ```
 
 ## Verification
@@ -80,3 +80,5 @@ Person A's independent Stage 2 control/health/worker preliminaries are documente
 `/producer` on the same web app is the subscribe-only Stage 0 receiver. It requests a credential from `POST /api/v1/stage0/receiver-token` (same Stage 0 secret, `canPublish: false`), joins the same room, and binds `CAM-HOST`, `CAM-GUEST` and `CAM-WIDE` tiles from each participant's server-set metadata. Only `CAM-HOST`'s microphone is played. The Mac never publishes.
 
 Mac startup, tunnel and verification steps: [docs/stage-0-d-mac-run.md](docs/stage-0-d-mac-run.md).
+
+`/recorder` is the standalone local recording test for any laptop (Stage 1, Test 1): capture your own webcam under the publisher's media policy, record, download, play outside the app. Stage 1 notes: [docs/stage-1-d-handoff.md](docs/stage-1-d-handoff.md).

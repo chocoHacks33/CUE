@@ -1,0 +1,53 @@
+{
+  "name": "reconnect_epoch_change",
+  "notes": "Epoch=1 stream buffers one is_final segment, then WebSocket reconnects (reset to epoch=2). A stale epoch=1 message arriving after reset is dropped. The next utterance under epoch=2 flushes normally.",
+  "timeout_s": 1.2,
+  "audio_epoch": 1,
+  "steps": [
+    {"at": 0.90, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 0.0, "duration": 0.90,
+      "is_final": true, "speech_final": false,
+      "channel": {"alternatives": [{
+        "transcript": "Sarah joins us", "confidence": 0.93,
+        "words": [
+          {"word": "sarah", "punctuated_word": "Sarah", "start": 0.10, "end": 0.45},
+          {"word": "joins", "punctuated_word": "joins", "start": 0.50, "end": 0.75},
+          {"word": "us",    "punctuated_word": "us",    "start": 0.80, "end": 0.90}
+        ]
+      }]}
+    }},
+    {"at": 1.50, "kind": "reset", "new_epoch": 2},
+    {"at": 1.80, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 1.00, "duration": 0.80,
+      "is_final": true, "speech_final": true,
+      "channel": {"alternatives": [{
+        "transcript": "after the break.", "confidence": 0.95,
+        "words": [
+          {"word": "after", "punctuated_word": "after", "start": 1.05, "end": 1.35},
+          {"word": "the",   "punctuated_word": "the",   "start": 1.40, "end": 1.55},
+          {"word": "break", "punctuated_word": "break.","start": 1.60, "end": 1.80}
+        ]
+      }]}
+    }},
+    {"at": 2.10, "kind": "message", "message": {
+      "audio_epoch": 2, "type": "Results",
+      "start": 0.0, "duration": 0.30,
+      "is_final": false, "speech_final": false,
+      "channel": {"alternatives": [{"transcript": "daniel", "confidence": 0.68, "words": []}]}
+    }},
+    {"at": 2.70, "kind": "message", "message": {
+      "audio_epoch": 2, "type": "Results",
+      "start": 0.0, "duration": 0.90,
+      "is_final": true, "speech_final": true,
+      "channel": {"alternatives": [{
+        "transcript": "Daniel, welcome.", "confidence": 0.96,
+        "words": [
+          {"word": "daniel",  "punctuated_word": "Daniel,",  "start": 0.10, "end": 0.55},
+          {"word": "welcome", "punctuated_word": "welcome.", "start": 0.60, "end": 0.90}
+        ]
+      }]}
+    }}
+  ]
+}

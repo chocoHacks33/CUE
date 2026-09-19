@@ -1,0 +1,46 @@
+{
+  "name": "future_mention",
+  "notes": "'Sarah joins us after the break.' — no cut should follow.",
+  "timeout_s": 1.2,
+  "audio_epoch": 1,
+  "steps": [
+    {"at": 0.40, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 0.0, "duration": 0.40,
+      "is_final": false, "speech_final": false,
+      "channel": {"alternatives": [{"transcript": "sarah joins", "confidence": 0.79, "words": []}]}
+    }},
+    {"at": 1.10, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 0.0, "duration": 1.10,
+      "is_final": true, "speech_final": false,
+      "channel": {"alternatives": [{
+        "transcript": "Sarah joins us", "confidence": 0.93,
+        "words": [
+          {"word": "sarah", "punctuated_word": "Sarah", "start": 0.10, "end": 0.45, "confidence": 0.96},
+          {"word": "joins", "punctuated_word": "joins", "start": 0.50, "end": 0.85, "confidence": 0.91},
+          {"word": "us",    "punctuated_word": "us",    "start": 0.90, "end": 1.10, "confidence": 0.94}
+        ]
+      }]}
+    }},
+    {"at": 1.60, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 1.20, "duration": 0.40,
+      "is_final": false, "speech_final": false,
+      "channel": {"alternatives": [{"transcript": "after the", "confidence": 0.71, "words": []}]}
+    }},
+    {"at": 2.10, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 1.20, "duration": 0.90,
+      "is_final": true, "speech_final": true,
+      "channel": {"alternatives": [{
+        "transcript": "after the break.", "confidence": 0.95,
+        "words": [
+          {"word": "after", "punctuated_word": "after", "start": 1.25, "end": 1.55, "confidence": 0.94},
+          {"word": "the",   "punctuated_word": "the",   "start": 1.60, "end": 1.75, "confidence": 0.93},
+          {"word": "break", "punctuated_word": "break.","start": 1.80, "end": 2.10, "confidence": 0.97}
+        ]
+      }]}
+    }}
+  ]
+}
