@@ -315,3 +315,4 @@ export function isDecodedAudioDescriptor(value: unknown): value is DecodedAudioD
 export * from "./guests";
 
 export * from "./readiness";
+export * from "./switching";

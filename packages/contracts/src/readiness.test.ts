@@ -45,6 +45,11 @@ describe("receiver readiness contract", () => {
     expect(isReceiverReadiness(reordered)).toBe(false);
   });
 
+  it("accepts a camera or the slate as the current source", () => {
+    expect(isReceiverReadiness({ ...sample(), currentSource: "CAM-WIDE" })).toBe(true);
+    expect(isReceiverReadiness({ ...sample(), currentSource: "SLATE" })).toBe(true);
+  });
+
   it("rejects an unknown current source or clock domain", () => {
     expect(isReceiverReadiness({ ...sample(), currentSource: "CAM-4" })).toBe(false);
     expect(isReceiverReadiness({ ...sample(), clockDomain: "wall" })).toBe(false);

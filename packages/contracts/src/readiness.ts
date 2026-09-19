@@ -1,4 +1,5 @@
 import { CAMERA_IDS, type CameraId, isCameraId } from "./index";
+import type { ProgramSource } from "./switching";
 
 /**
  * Receiver readiness: what the active Mac compositor tells the backend about
@@ -54,8 +55,8 @@ export interface ReceiverReadiness {
   connected: boolean;
   clockDomain: "renderer-monotonic";
   reportedAtMs: number;
-  /** The source currently drawn to the programme canvas. Null until the Stage 2 compositor exists. */
-  currentSource: CameraId | null;
+  /** The source currently drawn to the programme canvas: a camera, the slate, or null before the compositor starts. */
+  currentSource: ProgramSource | null;
   masterAudio: MasterAudioReadiness;
   /** Always exactly the three camera IDs, in CAMERA_IDS order. */
   slots: SlotReadiness[];
@@ -76,7 +77,11 @@ export function isReceiverReadiness(value: unknown): value is ReceiverReadiness 
   if (value.clockDomain !== "renderer-monotonic" || typeof value.connected !== "boolean") {
     return false;
   }
-  if (value.currentSource !== null && !(typeof value.currentSource === "string" && isCameraId(value.currentSource))) {
+  if (
+    value.currentSource !== null &&
+    value.currentSource !== "SLATE" &&
+    !(typeof value.currentSource === "string" && isCameraId(value.currentSource))
+  ) {
     return false;
   }
   if (!isRecord(value.masterAudio) || typeof value.masterAudio.attached !== "boolean") return false;

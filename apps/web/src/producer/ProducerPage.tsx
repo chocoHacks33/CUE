@@ -3,7 +3,9 @@ import {
   CAMERA_IDS,
   type CameraId,
   parsePublisherMetadata,
+  type ProgramSource,
   type ReceiverReadiness,
+  type RenderAck,
 } from "@cue/contracts";
 import { RemoteParticipant, Room, RoomEvent, Track } from "livekit-client";
 import type {
@@ -14,6 +16,7 @@ import type {
 } from "livekit-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { ProgramPanel } from "../compositor/ProgramPanel";
 import { RecordingTest } from "../recording/RecordingTest";
 import { PairingPanel } from "./PairingPanel";
 import { buildReadiness } from "./readiness";
@@ -114,12 +117,15 @@ export function ProducerPage() {
   const [recordSlot, setRecordSlot] = useState<CameraId>(MASTER_AUDIO_CAMERA);
   const [recordWithAudio, setRecordWithAudio] = useState(true);
   const [readiness, setReadiness] = useState<ReceiverReadiness | null>(null);
+  const [rendererGeneration, setRendererGeneration] = useState(0);
 
   const roomRef = useRef<Room | null>(null);
   /** Stable for this tab. A second tab is a different renderer and can never ACK for this one. */
   const rendererIdRef = useRef(`renderer-${crypto.randomUUID().slice(0, 8)}`);
   const rendererGenerationRef = useRef(0);
   const readinessRef = useRef<ReceiverReadiness | null>(null);
+  const programSourceRef = useRef<ProgramSource | null>(null);
+  const lastAckRef = useRef<RenderAck | null>(null);
   const readinessContextRef = useRef({
     receiverIdentity: null as string | null,
     connected: false,
@@ -172,7 +178,7 @@ export function ProducerPage() {
           connected: ctx.connected,
           audioPlaybackAllowed: ctx.audioPlaybackAllowed,
           audioAttached: audioTrackRef.current !== null,
-          currentSource: null,
+          currentSource: programSourceRef.current,
         },
         readinessRef.current,
       );
@@ -530,6 +536,7 @@ export function ProducerPage() {
       });
 
       rendererGenerationRef.current += 1;
+      setRendererGeneration(rendererGenerationRef.current);
       readinessContextRef.current = {
         receiverIdentity: room.localParticipant.identity,
         connected: true,
@@ -573,6 +580,22 @@ export function ProducerPage() {
     noteAudioPlayback(room.canPlaybackAudio);
     commitSlots((s) => setAudioPlayback(s, room.canPlaybackAudio));
   }
+
+  const getSourceElement = useCallback(
+    (cameraId: CameraId): HTMLVideoElement | null => videoElements.current.get(cameraId) ?? null,
+    [],
+  );
+  const getMasterAudioTrack = useCallback(
+    (): MediaStreamTrack | null => audioTrackRef.current?.mediaStreamTrack ?? null,
+    [],
+  );
+  const onProgramChange = useCallback((source: ProgramSource) => {
+    programSourceRef.current = source;
+  }, []);
+  /** Acks are kept for the Stage 2 control socket; until then the switcher log already narrates them. */
+  const onAck = useCallback((ack: RenderAck) => {
+    lastAckRef.current = ack;
+  }, []);
 
   const getRecordingStream = useCallback((): MediaStream | null => {
     const video = videoTracks.current.get(recordSlot)?.mediaStreamTrack;
@@ -747,6 +770,19 @@ export function ProducerPage() {
         </div>
 
         <div className="stack">
+          <ProgramPanel
+            eventId={connectedEventRef.current}
+            rendererId={rendererIdRef.current}
+            rendererGeneration={rendererGeneration}
+            connected={status === "connected" || status === "reconnecting"}
+            readiness={readiness}
+            getSourceElement={getSourceElement}
+            getMasterAudioTrack={getMasterAudioTrack}
+            onProgramChange={onProgramChange}
+            onAck={onAck}
+            onLog={appendLog}
+          />
+
           <div className="panel preview-panel">
             <div className="preview-heading">
               <div>
