@@ -11,13 +11,13 @@ CUE is a context-aware live director for small productions. The current Stage 0 
 | Person C's Windows laptop | `CAM-WIDE` | video only |
 | Person D's MacBook | central backend/director | subscribes; publishes no mic/camera |
 
-LiveKit Cloud relays media. The FastAPI service on D's Mac issues short-lived, room-scoped publisher tokens; LiveKit credentials never enter the browser. The Stage 0 bootstrap secret is a temporary admission guard and must be replaced by single-use pairing in Stage 1.
+LiveKit Cloud relays media. The FastAPI service on D's Mac issues short-lived, room-scoped publisher tokens; LiveKit credentials never enter the browser. Stage 1 publishers use single-use camera-slot pairing and explicit producer approval. The producer credential stays on D's Mac.
 
 ## Quick start
 
 Prerequisites: an even-numbered Node.js LTS release (20, 22 or 24+), Python 3.11+, and an authorised LiveKit Cloud project.
 
-1. Copy `.env.example` to `.env` and fill in the LiveKit settings and a random `CUE_BOOTSTRAP_SECRET`.
+1. Copy `.env.example` to `.env` and fill in the LiveKit settings, a random `CUE_BOOTSTRAP_SECRET` for the temporary Stage 0 receiver and a different `CUE_PRODUCER_SECRET` for Stage 1 pairing.
 2. Start the API:
 
    ```bash
@@ -36,7 +36,7 @@ Prerequisites: an even-numbered Node.js LTS release (20, 22 or 24+), Python 3.11
    npm run dev:web
    ```
 
-4. Open `http://localhost:5173`, keep `CAM-HOST` selected for Person A, enter the Stage 0 bootstrap secret, preview the camera, then publish.
+4. D creates a camera-slot pairing grant. Open `http://localhost:5173`, claim its single-use token, compare the verification code with D, obtain approval, preview the camera, then publish.
 
 Camera access works on `localhost` or HTTPS. A different laptop cannot use D's `localhost`; D must expose the web/API endpoint through the team's approved authenticated HTTPS setup.
 
@@ -71,8 +71,12 @@ python -m ruff check .
 
 See [docs/stage-0-a-handoff.md](docs/stage-0-a-handoff.md) for the A-to-D live proof and the exact exit criteria that still require the physical MacBook.
 
+Person A's Stage 1 protocol, frame/PCM contracts and physical handoff are in [docs/stage-1-a-handoff.md](docs/stage-1-a-handoff.md).
+
 ## Producer receiver (Person D's Mac)
 
 `/producer` on the same web app is the subscribe-only Stage 0 receiver. It requests a credential from `POST /api/v1/stage0/receiver-token` (same Stage 0 secret, `canPublish: false`), joins the same room, and binds `CAM-HOST`, `CAM-GUEST` and `CAM-WIDE` tiles from each participant's server-set metadata. Only `CAM-HOST`'s microphone is played. The Mac never publishes.
 
 Mac startup, tunnel and verification steps: [docs/stage-0-d-mac-run.md](docs/stage-0-d-mac-run.md).
+
+`/recorder` is the standalone local recording test for any laptop (Stage 1, Test 1): capture your own webcam under the publisher's media policy, record, download, play outside the app. Stage 1 notes: [docs/stage-1-d-handoff.md](docs/stage-1-d-handoff.md).

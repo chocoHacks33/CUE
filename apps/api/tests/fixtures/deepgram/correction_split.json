@@ -1,0 +1,45 @@
+{
+  "name": "correction_split",
+  "notes": "Mid-sentence correction split across finals: 'Please welcome Sarah... actually, Daniel.' One utterance.",
+  "timeout_s": 1.2,
+  "audio_epoch": 1,
+  "steps": [
+    {"at": 0.30, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 0.0, "duration": 0.30,
+      "is_final": false, "speech_final": false,
+      "channel": {"alternatives": [{"transcript": "please welcome", "confidence": 0.82, "words": []}]}
+    }},
+    {"at": 0.90, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 0.0, "duration": 0.90,
+      "is_final": true, "speech_final": false,
+      "channel": {"alternatives": [{
+        "transcript": "Please welcome Sarah", "confidence": 0.93,
+        "words": [
+          {"word": "please",  "punctuated_word": "Please",  "start": 0.10, "end": 0.40, "confidence": 0.94},
+          {"word": "welcome", "punctuated_word": "welcome", "start": 0.45, "end": 0.75, "confidence": 0.92},
+          {"word": "sarah",   "punctuated_word": "Sarah",   "start": 0.80, "end": 0.90, "confidence": 0.93}
+        ]
+      }]}
+    }},
+    {"at": 1.30, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 1.10, "duration": 0.20,
+      "is_final": false, "speech_final": false,
+      "channel": {"alternatives": [{"transcript": "actually", "confidence": 0.68, "words": []}]}
+    }},
+    {"at": 2.00, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 1.10, "duration": 0.90,
+      "is_final": true, "speech_final": true,
+      "channel": {"alternatives": [{
+        "transcript": "actually, Daniel.", "confidence": 0.96,
+        "words": [
+          {"word": "actually", "punctuated_word": "actually,", "start": 1.10, "end": 1.50, "confidence": 0.95},
+          {"word": "daniel",   "punctuated_word": "Daniel.",   "start": 1.65, "end": 2.00, "confidence": 0.97}
+        ]
+      }]}
+    }}
+  ]
+}

@@ -1,17 +1,19 @@
 import {
   CAMERA_CONTRACTS,
-  CAMERA_IDS,
   type CameraId,
   mayPublishMicrophone,
 } from "@cue/contracts";
 import { Room, RoomEvent, Track } from "livekit-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { requestPublisherToken } from "./api";
+import { claimPairing, exchangePairing, readPairingStatus } from "./api";
 import { captureConstraints, validateCapturedTracks } from "./mediaPolicy";
 
 type PublisherStatus =
   | "idle"
+  | "claiming"
+  | "awaiting-approval"
+  | "paired"
   | "requesting-media"
   | "preview-ready"
   | "connecting"
@@ -20,6 +22,13 @@ type PublisherStatus =
   | "error";
 
 const DEFAULT_API_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+
+interface PairingSession {
+  claimId: string;
+  claimSecret: string;
+  verificationCode: string;
+  status: string;
+}
 
 function messageForMediaError(error: unknown): string {
   if (error instanceof DOMException) {
@@ -32,19 +41,20 @@ function messageForMediaError(error: unknown): string {
 
 export function PublisherPage() {
   const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_URL);
-  const [bootstrapSecret, setBootstrapSecret] = useState("");
-  const [eventId, setEventId] = useState("hackmit-demo");
+  const [pairingToken, setPairingToken] = useState("");
   const [displayName, setDisplayName] = useState("Person A");
+  const [deviceLabel, setDeviceLabel] = useState("A Windows laptop");
   const [cameraId, setCameraId] = useState<CameraId>("CAM-HOST");
+  const [pairing, setPairing] = useState<PairingSession | null>(null);
   const [status, setStatus] = useState<PublisherStatus>("idle");
-  const [detail, setDetail] = useState("Choose a source and test the local preview.");
+  const [detail, setDetail] = useState("Enter the single-use token supplied by the producer.");
   const [remoteIdentity, setRemoteIdentity] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const roomRef = useRef<Room | null>(null);
 
-  const stop = useCallback(async () => {
+  const stopMedia = useCallback(async () => {
     const room = roomRef.current;
     roomRef.current = null;
     if (room) await room.disconnect();
@@ -57,6 +67,13 @@ export function PublisherPage() {
     setStatus("idle");
     setDetail("Camera and room connection stopped.");
   }, []);
+
+  const stop = useCallback(async () => {
+    await stopMedia();
+    setPairing(null);
+    setPairingToken("");
+    setDetail("Sharing stopped. Request a new single-use pairing token to reconnect.");
+  }, [stopMedia]);
 
   useEffect(() => {
     return () => {
@@ -77,7 +94,12 @@ export function PublisherPage() {
       return;
     }
 
-    await stop();
+    if (!pairing) {
+      setStatus("error");
+      setDetail("Claim a producer-issued pairing token before opening the camera.");
+      return;
+    }
+    await stopMedia();
     setStatus("requesting-media");
     setDetail("Waiting for camera permission…");
     try {
@@ -100,6 +122,60 @@ export function PublisherPage() {
     }
   }
 
+  async function pairDevice() {
+    if (!pairingToken.trim() || !displayName.trim() || !deviceLabel.trim()) {
+      setStatus("error");
+      setDetail("Pairing token, display name and device label are required.");
+      return;
+    }
+    await stopMedia();
+    setStatus("claiming");
+    setDetail("Consuming the single-use pairing token…");
+    try {
+      const claim = await claimPairing(apiBaseUrl, {
+        pairingToken: pairingToken.trim(),
+        displayName: displayName.trim(),
+        deviceLabel: deviceLabel.trim(),
+      });
+      setCameraId(claim.camera.cameraId);
+      setPairing({
+        claimId: claim.claimId,
+        claimSecret: claim.claimSecret,
+        verificationCode: claim.verificationCode,
+        status: claim.status,
+      });
+      setPairingToken("");
+      setStatus("awaiting-approval");
+      setDetail(
+        `Show ${claim.verificationCode} to the producer. You may test the local preview while approval is pending.`,
+      );
+    } catch (error) {
+      setStatus("error");
+      setDetail(error instanceof Error ? error.message : "Unable to claim pairing token.");
+    }
+  }
+
+  async function checkApproval() {
+    if (!pairing) return;
+    try {
+      const result = await readPairingStatus(apiBaseUrl, pairing);
+      setPairing((current) => (current ? { ...current, status: result.status } : current));
+      if (result.status === "APPROVED") {
+        setStatus(streamRef.current ? "preview-ready" : "paired");
+        setDetail("Producer approved this device. Start the preview, then publish.");
+      } else if (result.status === "REJECTED") {
+        setStatus("error");
+        setDetail("Producer rejected this device. Request a new pairing token if needed.");
+      } else {
+        setStatus("awaiting-approval");
+        setDetail(`Approval is ${result.status.toLowerCase()}. Verify ${result.verificationCode}.`);
+      }
+    } catch (error) {
+      setStatus("error");
+      setDetail(error instanceof Error ? error.message : "Unable to check pairing approval.");
+    }
+  }
+
   async function publish() {
     const stream = streamRef.current;
     if (!stream) {
@@ -107,21 +183,19 @@ export function PublisherPage() {
       setDetail("Start and verify the local preview before publishing.");
       return;
     }
-    if (!bootstrapSecret || !eventId || !displayName.trim()) {
+    if (!pairing) {
       setStatus("error");
-      setDetail("API URL, event ID, display name and Stage 0 secret are required.");
+      setDetail("A producer-approved pairing session is required.");
       return;
     }
 
     setStatus("connecting");
     setDetail("Requesting a scoped credential and connecting to LiveKit…");
     let room: Room | null = null;
+    let credentialExchanged = false;
     try {
-      const credential = await requestPublisherToken(apiBaseUrl, bootstrapSecret, {
-        eventId,
-        cameraId,
-        displayName: displayName.trim(),
-      });
+      const credential = await exchangePairing(apiBaseUrl, pairing);
+      credentialExchanged = true;
 
       if (credential.camera.cameraId !== cameraId) {
         throw new Error("Server returned a different camera contract");
@@ -138,8 +212,9 @@ export function PublisherPage() {
         setDetail("Reconnected and publishing. Confirm the physical marker on D's Mac.");
       });
       room.on(RoomEvent.Disconnected, () => {
-        setStatus("preview-ready");
-        setDetail("Disconnected from LiveKit. Local preview remains available.");
+        setStatus("error");
+        setDetail("Disconnected from LiveKit. Request a new pairing token before publishing again.");
+        setPairing(null);
         setRemoteIdentity(null);
       });
 
@@ -175,17 +250,27 @@ export function PublisherPage() {
       if (videoRef.current) videoRef.current.srcObject = null;
       setStatus("error");
       const reason = error instanceof Error ? error.message : "Unable to publish the webcam.";
-      setDetail(`${reason} Start a new local preview before retrying.`);
+      if (credentialExchanged) {
+        setPairing(null);
+        setDetail(`${reason} The claim was consumed; request a new pairing token.`);
+      } else {
+        setDetail(`${reason} Start a new local preview before retrying.`);
+      }
     }
   }
 
-  const controlsLocked = status === "connecting" || status === "published" || status === "reconnecting";
+  const controlsLocked =
+    status === "claiming" ||
+    status === "requesting-media" ||
+    status === "connecting" ||
+    status === "published" ||
+    status === "reconnecting";
   const contract = CAMERA_CONTRACTS[cameraId];
 
   return (
     <main className="shell">
       <header className="hero">
-        <p className="eyebrow">CUE · STAGE 0</p>
+        <p className="eyebrow">CUE · STAGE 1</p>
         <h1>Windows camera publisher</h1>
         <p>Preview locally, then publish one server-labelled source to D’s MacBook.</p>
       </header>
@@ -196,41 +281,38 @@ export function PublisherPage() {
 
           <label>
             Camera source
-            <select
-              value={cameraId}
-              disabled={controlsLocked || status === "preview-ready"}
-              onChange={(event) => setCameraId(event.target.value as CameraId)}
-            >
-              {CAMERA_IDS.map((id) => (
-                <option key={id} value={id}>
-                  {id} · {CAMERA_CONTRACTS[id].role}
-                </option>
-              ))}
-            </select>
+            <input value={pairing ? cameraId : "Assigned after pairing"} readOnly />
           </label>
 
           <div className="contract-card">
-            <span>Owner {contract.owner}</span>
-            <strong>{contract.role}</strong>
-            <span>{contract.audioPolicy === "MASTER" ? "Master mic enabled" : "Video only"}</span>
+            {pairing ? (
+              <>
+                <span>Owner {contract.owner}</span>
+                <strong>{contract.role}</strong>
+                <span>
+                  {contract.audioPolicy === "MASTER" ? "Master mic enabled" : "Video only"}
+                </span>
+              </>
+            ) : (
+              <strong>Waiting for server assignment</strong>
+            )}
           </div>
-
-          <label>
-            Event ID
-            <input
-              value={eventId}
-              disabled={controlsLocked}
-              pattern="[a-z0-9][a-z0-9-]*"
-              onChange={(event) => setEventId(event.target.value.toLowerCase())}
-            />
-          </label>
 
           <label>
             Display name
             <input
               value={displayName}
-              disabled={controlsLocked}
+              disabled={controlsLocked || Boolean(pairing)}
               onChange={(event) => setDisplayName(event.target.value)}
+            />
+          </label>
+
+          <label>
+            Device label
+            <input
+              value={deviceLabel}
+              disabled={controlsLocked || Boolean(pairing)}
+              onChange={(event) => setDeviceLabel(event.target.value)}
             />
           </label>
 
@@ -239,31 +321,37 @@ export function PublisherPage() {
             <input
               type="url"
               value={apiBaseUrl}
-              disabled={controlsLocked}
+              disabled={controlsLocked || Boolean(pairing)}
               onChange={(event) => setApiBaseUrl(event.target.value)}
             />
           </label>
 
           <label>
-            Stage 0 admission secret
+            Single-use pairing token
             <input
               type="password"
-              value={bootstrapSecret}
-              disabled={controlsLocked}
+              value={pairingToken}
+              disabled={controlsLocked || Boolean(pairing)}
               autoComplete="off"
-              onChange={(event) => setBootstrapSecret(event.target.value)}
+              onChange={(event) => setPairingToken(event.target.value)}
             />
           </label>
 
           <div className="actions">
+            <button type="button" onClick={() => void pairDevice()} disabled={controlsLocked || Boolean(pairing)}>
+              Claim pairing
+            </button>
             <button type="button" onClick={() => void startPreview()} disabled={controlsLocked}>
               Test local preview
+            </button>
+            <button type="button" onClick={() => void checkApproval()} disabled={!pairing || controlsLocked}>
+              Check approval
             </button>
             <button
               type="button"
               className="primary"
               onClick={() => void publish()}
-              disabled={status !== "preview-ready" && status !== "error"}
+              disabled={status !== "preview-ready" || pairing?.status !== "APPROVED"}
             >
               Publish to D’s Mac
             </button>
@@ -298,11 +386,19 @@ export function PublisherPage() {
               <dd>{contract.audioPolicy}</dd>
             </dl>
           )}
+          {pairing && !remoteIdentity && (
+            <dl className="connection-details">
+              <dt>Verification</dt>
+              <dd>{pairing.verificationCode}</dd>
+              <dt>Approval</dt>
+              <dd>{pairing.status}</dd>
+            </dl>
+          )}
         </div>
       </section>
 
       <footer>
-        Stage 0 uses a temporary shared admission secret. Stage 1 replaces it with single-use pairing and producer approval.
+        The producer credential stays on D’s Mac. This page receives only a short-lived, single-use pairing capability.
       </footer>
     </main>
   );
