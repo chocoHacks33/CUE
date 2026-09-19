@@ -3,7 +3,7 @@
 Plan §7, Stage 1 (B): *"own video-only capture; enrolment/reference module;
 confirm B feed reaches the Mac."*
 
-Branch: `codex/b-vision-clean` (PR #7).
+Branch: `codex/b-stage-1`.
 
 ## Deliverable 1 — video-only capture on CAM-GUEST
 
@@ -36,12 +36,11 @@ GET    /api/v1/guests                        list guests (never embeddings)
 POST   /api/v1/guests/{guest_id}/references  add an enrolment reference
 DELETE /api/v1/guests/{guest_id}             withdraw consent, delete references
 DELETE /api/v1/guests                        purge the event
-GET    /api/v1/vision/gallery                worker-only; carries embeddings
+GET    /api/v1/guests/gallery                worker-only; carries embeddings
 ```
 
-Verified against the running app's OpenAPI schema. There are no
-`/vision/observations`, `/vision/invalidate` or `/vision/tallies` routes — those
-are Stage 2.
+Verified against the running app's OpenAPI schema. There are no observation
+intake routes: B accepts consent, references and gallery reads, nothing else.
 
 ### Enrolment keeps the photo where it is
 
@@ -83,7 +82,7 @@ Windows 11, Python 3.14.7:
 cd apps/api && python -m pytest -q     ->  182 passed (whole backend suite)
 cd apps/api && python -m ruff check .  ->  All checks passed
 cue-guests --help                      ->  entry point resolves
-OpenAPI route dump                     ->  6 guest/vision routes, no observation endpoints
+OpenAPI route dump                     ->  6 guest routes, no observation endpoints
 ```
 
 **Not run locally:** the npm gates — Node is not installed on this machine.
@@ -93,35 +92,23 @@ CI passes on macOS and Windows for PR #7.
 OpenCV wheel installed, no face detected, no camera published. Every test here
 uses scripted fixtures.
 
-## Not in Stage 1 — deferred to Stage 2/3
+## Not in scope here
 
-Removed from this branch so nothing implies a capability that has not been built.
-Parked on `codex/b-vision-stage2`.
-
-| What | Stage |
-|---|---|
-| `guests/observations.py` — live observation store | 2 |
-| `POST`/`GET /vision/observations` | 2 |
-| `POST /vision/invalidate` | 2 |
-| `GET /vision/tallies` | 2 |
-| `apps/web/src/guests/evidence.ts` — producer-UI evidence semantics | 3 |
-| `matching.py`, `tracking.py`, `pipeline.py`, `ledger.py` | 2 |
-| `calibration.py` | 3 |
-
-`PurgeReceipt.observations_dropped` stays in the contract but always reports `0`,
-because there is no store to drop from yet.
+Live observation intake, gallery matching, track association and calibration
+are not part of Stage 0 or Stage 1 and are not in this branch. Nothing here
+produces an observation, and `PurgeReceipt.observations_dropped` always
+reports `0` for that reason.
 
 ## What has to happen next, in order
 
-1. **Mac runtime gate with D** — install `apps/api[vision]`, confirm an OpenCV
+1. **Mac runtime gate with D** — install `apps/api[opencv]`, confirm an OpenCV
    wheel exists for D's Python and architecture. Nothing else matters until this
    passes.
-2. **Download and pin the weights** — procedure in `docs/vision-models.md`,
+2. **Download and pin the weights** — procedure in [b-stage-0.md](b-stage-0.md),
    including verifying the licences rather than trusting the table.
 3. **First real inference on the Mac** — one photo through `cue-guests enrol`,
    one live frame through `YuNetDetector`.
 4. **B's media checks** — `docs/results/b-media-check.template.md`.
-5. **Only then** unpark Stage 2.
 
 See also [b-stage-0.md](b-stage-0.md) and
-[b-prep-stage-1.md](b-prep-stage-1.md).
+[b-stage-prep-1.md](b-stage-prep-1.md).

@@ -17,7 +17,7 @@ const OBSERVED_AT = 1758294000185;
  */
 function confirmedObservation(): Record<string, unknown> {
   return {
-    visionContractVersion: "0.1.0",
+    guestContractVersion: "0.1.0",
     observationId: "obs-cam-guest-3-4821",
     eventId: "hackmit-demo",
     cameraId: "CAM-GUEST",
@@ -66,7 +66,7 @@ function confirmedObservation(): Record<string, unknown> {
 
 function activeGuest(): Record<string, unknown> {
   return {
-    visionContractVersion: "0.1.0",
+    guestContractVersion: "0.1.0",
     guestId: "guest-sarah",
     eventId: "hackmit-demo",
     displayName: "Sarah",
@@ -158,8 +158,8 @@ describe("observation validation", () => {
 
   it("rejects a contract version it does not implement", () => {
     expect(() =>
-      parseVisualObservation(mutate((draft) => (draft.visionContractVersion = "0.2.0"))),
-    ).toThrow(/Unsupported vision contract version/);
+      parseVisualObservation(mutate((draft) => (draft.guestContractVersion = "0.2.0"))),
+    ).toThrow(/Unsupported guest contract version/);
   });
 });
 

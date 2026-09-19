@@ -1,6 +1,6 @@
 """The Python half of the shared fixture check.
 
-`packages/contracts/src/vision.test.ts` asserts the same rules on the same
+`packages/contracts/src/guests.test.ts` asserts the same rules on the same
 files. If only one runtime rejects a payload, it is not a shared contract.
 """
 

@@ -19,7 +19,7 @@ Embedding = tuple[float, ...]
 
 @dataclass(frozen=True)
 class DecodedFrame:
-    """A's worker-to-vision handover.
+    """A's worker-to-face-capture handover.
 
     `image` is whatever the ingest side decoded (a numpy BGR array in practice).
     The pure-Python core never indexes it; only the OpenCV adapters do.

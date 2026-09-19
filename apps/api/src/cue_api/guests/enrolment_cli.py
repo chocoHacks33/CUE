@@ -12,7 +12,7 @@ import sys
 import time
 from pathlib import Path
 
-from cue_api.guests.backend_client import BackendError, VisionBackendClient
+from cue_api.guests.backend_client import BackendError, GuestBackendClient
 from cue_api.guests.capture_quality import QualityPolicy, assess
 from cue_api.guests.face_models import DEFAULT_MODEL_DIR, MODEL_FILES, status_report
 from cue_api.guests.types import DecodedFrame
@@ -41,7 +41,7 @@ def _models_command(args: argparse.Namespace) -> int:
     if unpinned:
         print(
             "note: paste these sha256 values into cue_api.guests/models.py and "
-            "docs/vision-models.md to pin them",
+            "docs/b-stage-0.md to pin them",
             file=sys.stderr,
         )
     if missing:
@@ -107,7 +107,7 @@ def _enrol_command(args: argparse.Namespace) -> int:
             print(f"error: {error}", file=sys.stderr)
             return 1
 
-    client = VisionBackendClient(args.api, args.secret)
+    client = GuestBackendClient(args.api, args.secret)
     try:
         guest = client.enrol_guest(
             event_id=args.event,
@@ -138,7 +138,7 @@ def _enrol_command(args: argparse.Namespace) -> int:
 
 
 def _gallery_command(args: argparse.Namespace) -> int:
-    client = VisionBackendClient(args.api, args.secret)
+    client = GuestBackendClient(args.api, args.secret)
     try:
         print(json.dumps(client.list_guests(args.event), indent=2))
     except BackendError as error:
@@ -148,7 +148,7 @@ def _gallery_command(args: argparse.Namespace) -> int:
 
 
 def _forget_command(args: argparse.Namespace) -> int:
-    client = VisionBackendClient(args.api, args.secret)
+    client = GuestBackendClient(args.api, args.secret)
     try:
         if args.guest_id:
             receipt = client.withdraw(event_id=args.event, guest_id=args.guest_id)

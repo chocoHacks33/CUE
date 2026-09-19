@@ -20,7 +20,7 @@ def _import_cv2() -> Any:
     except ImportError as error:  # pragma: no cover - environment dependent
         raise RuntimeError(
             "OpenCV is required for live inference. Install the extra: "
-            'python -m pip install -e "apps/api[vision]"'
+            'python -m pip install -e "apps/api[opencv]"'
         ) from error
     return cv2
 

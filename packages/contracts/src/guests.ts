@@ -6,7 +6,7 @@
  */
 import { type CameraId, isCameraId } from "./index";
 
-export const VISION_CONTRACT_VERSION = "0.1.0" as const;
+export const GUEST_CONTRACT_VERSION = "0.1.0" as const;
 
 /** Observation outcomes. Only CONFIRMED may support a named close-up. */
 export const OBSERVATION_STATUSES = [
@@ -107,7 +107,7 @@ export interface ObservationTiming {
 }
 
 export interface VisualObservation {
-  visionContractVersion: typeof VISION_CONTRACT_VERSION;
+  guestContractVersion: typeof GUEST_CONTRACT_VERSION;
   observationId: string;
   eventId: string;
   cameraId: CameraId;
@@ -142,7 +142,7 @@ export interface GuestConsent {
  * absent: they never leave the Mac runtime through this shape.
  */
 export interface GuestRecord {
-  visionContractVersion: typeof VISION_CONTRACT_VERSION;
+  guestContractVersion: typeof GUEST_CONTRACT_VERSION;
   guestId: string;
   eventId: string;
   displayName: string;
@@ -250,8 +250,8 @@ function parseBox(value: unknown): NormalisedBox | null {
  */
 export function parseVisualObservation(value: unknown): VisualObservation {
   const root = asRecord(value, "observation");
-  if (root.visionContractVersion !== VISION_CONTRACT_VERSION) {
-    throw new Error(`Unsupported vision contract version: ${String(root.visionContractVersion)}`);
+  if (root.guestContractVersion !== GUEST_CONTRACT_VERSION) {
+    throw new Error(`Unsupported guest contract version: ${String(root.guestContractVersion)}`);
   }
 
   const cameraId = asString(root, "cameraId", "observation");
@@ -316,7 +316,7 @@ export function parseVisualObservation(value: unknown): VisualObservation {
   if (typeof passed !== "boolean") throw new Error("quality.passed must be a boolean");
 
   return {
-    visionContractVersion: VISION_CONTRACT_VERSION,
+    guestContractVersion: GUEST_CONTRACT_VERSION,
     observationId: asString(root, "observationId", "observation"),
     eventId: asString(root, "eventId", "observation"),
     cameraId,
@@ -361,8 +361,8 @@ export function parseVisualObservation(value: unknown): VisualObservation {
 
 export function parseGuestRecord(value: unknown): GuestRecord {
   const root = asRecord(value, "guest");
-  if (root.visionContractVersion !== VISION_CONTRACT_VERSION) {
-    throw new Error(`Unsupported vision contract version: ${String(root.visionContractVersion)}`);
+  if (root.guestContractVersion !== GUEST_CONTRACT_VERSION) {
+    throw new Error(`Unsupported guest contract version: ${String(root.guestContractVersion)}`);
   }
   if ("references" in root || "embedding" in root || "embeddings" in root) {
     throw new Error("A guest record must never carry reference embeddings");
@@ -402,7 +402,7 @@ export function parseGuestRecord(value: unknown): GuestRecord {
   }
 
   return {
-    visionContractVersion: VISION_CONTRACT_VERSION,
+    guestContractVersion: GUEST_CONTRACT_VERSION,
     guestId: asString(root, "guestId", "guest"),
     eventId: asString(root, "eventId", "guest"),
     displayName: asString(root, "displayName", "guest"),
@@ -433,7 +433,7 @@ export interface CameraObservationView {
 }
 
 export interface ObservationSnapshot {
-  visionContractVersion: typeof VISION_CONTRACT_VERSION;
+  guestContractVersion: typeof GUEST_CONTRACT_VERSION;
   eventId: string;
   nowMs: number;
   galleryVersion: number;
@@ -442,15 +442,15 @@ export interface ObservationSnapshot {
 
 export function parseObservationSnapshot(value: unknown): ObservationSnapshot {
   const root = asRecord(value, "snapshot");
-  if (root.visionContractVersion !== VISION_CONTRACT_VERSION) {
-    throw new Error(`Unsupported vision contract version: ${String(root.visionContractVersion)}`);
+  if (root.guestContractVersion !== GUEST_CONTRACT_VERSION) {
+    throw new Error(`Unsupported guest contract version: ${String(root.guestContractVersion)}`);
   }
 
   const cameras = root.cameras;
   if (!Array.isArray(cameras)) throw new Error("snapshot.cameras must be an array");
 
   return {
-    visionContractVersion: VISION_CONTRACT_VERSION,
+    guestContractVersion: GUEST_CONTRACT_VERSION,
     eventId: asString(root, "eventId", "snapshot"),
     nowMs: asNumber(root, "nowMs", "snapshot"),
     galleryVersion: asNumber(root, "galleryVersion", "snapshot"),
