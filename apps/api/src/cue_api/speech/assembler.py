@@ -87,6 +87,15 @@ class Assembler:
         self._audio_epoch = new_epoch
         self._reset_buffer()
 
+    def tick(self, now: float) -> list[Event]:
+        """Run only the timeout check.
+
+        Callers that go silent (no new Deepgram messages after the last
+        is_final=true) can invoke tick() to give the assembler a chance
+        to flush the buffered utterance once ``timeout_s`` has elapsed.
+        """
+        return self._maybe_flush_on_timeout(now)
+
     def feed(self, message: dict, now: float) -> list[Event]:
         # Drop stale-epoch messages: a delayed WebSocket frame from before a
         # reconnect must not contaminate the current utterance.

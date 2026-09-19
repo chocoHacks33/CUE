@@ -2,10 +2,10 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://cue.local/schemas/decision.schema.json",
   "title": "Decision",
-  "description": "C-lane proposal to A for packages/contracts. Output of services/api/policy/director.decide(). A Decision is what the compositor should render (or the reason it should not). The policy is pure: the caller supplies clock, cameras and prior state; the Decision is derivable from those.",
+  "description": "C-lane proposal to A for packages/contracts. Output of services/api/policy/director.decide() wrapped by DirectorSession. A Decision is what the compositor should render (or the reason it should not). The policy is pure: the caller supplies clock, cameras and prior state; the Decision is derivable from those. Stage-2 addition: DirectorSession stamps each Decision with a monotonic decision_seq and the mode_revision that was current at issue time. The compositor is expected to ACK by decision_seq.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["action", "camera_id", "reason"],
+  "required": ["action", "camera_id", "reason", "decision_seq", "mode_revision"],
   "$defs": {
     "DecisionAction": {
       "type": "string",
@@ -23,6 +23,16 @@
       "type": "string",
       "minLength": 1,
       "description": "Short human-readable reason. Always non-empty. Surfaced to the producer log; not the model's chain-of-thought."
+    },
+    "decision_seq": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Session-scoped monotonic sequence, starting at 1 and increasing on every issued decision (AI or manual). The compositor uses this to ACK the exact decision it rendered; ACKs whose seq does not match the pending slot are ignored."
+    },
+    "mode_revision": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "DirectorSession's mode_revision when this decision was issued. Bumped on every manual command (TAKE/HOLD/RESUME_AUTO/SLATE) and on on_reconnect(). Cues tagged with an older mode_revision are rejected as stale so late AI answers after a HOLD or reconnect cannot fire."
     }
   },
   "examples": [
@@ -30,25 +40,41 @@
       "_fixture": "take_named_guest",
       "action": "TAKE",
       "camera_id": "CAM-GUEST",
-      "reason": "fresh identity sarah on CAM-GUEST (age 0.40s)"
+      "reason": "fresh identity sarah on CAM-GUEST (age 0.40s)",
+      "decision_seq": 2,
+      "mode_revision": 0
     },
     {
       "_fixture": "stay_manual_hold",
       "action": "STAY",
       "camera_id": "CAM-HOST",
-      "reason": "manual HOLD"
+      "reason": "manual HOLD",
+      "decision_seq": 4,
+      "mode_revision": 1
     },
     {
       "_fixture": "take_wide_fallback",
       "action": "TAKE",
       "camera_id": "CAM-WIDE",
-      "reason": "target sarah unusable -> wide"
+      "reason": "target sarah unusable -> wide; current unhealthy, safety failover",
+      "decision_seq": 3,
+      "mode_revision": 0
     },
     {
       "_fixture": "slate",
       "action": "SLATE",
       "camera_id": null,
-      "reason": "target sarah unusable; no healthy wide -> slate"
+      "reason": "target sarah unusable; no healthy wide -> slate",
+      "decision_seq": 7,
+      "mode_revision": 2
+    },
+    {
+      "_fixture": "stay_stale_mode_revision",
+      "action": "STAY",
+      "camera_id": "CAM-HOST",
+      "reason": "cue from stale mode_revision 0 (current 1)",
+      "decision_seq": 5,
+      "mode_revision": 1
     }
   ]
 }

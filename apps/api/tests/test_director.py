@@ -293,6 +293,32 @@ def test_no_cue_stays_on_healthy_current():
     assert d.camera_id == "CAM-HOST"
 
 
+# --- guest_ready gate --------------------------------------------------------
+
+def test_guest_not_ready_falls_back_to_wide_with_named_reason():
+    stack = cams(**{"CAM-GUEST": {"guest_ready": False}})
+    d = decide(now_cue(), stack, base_state(), NOW)
+    assert d.action == DecisionAction.TAKE
+    assert d.camera_id == "CAM-WIDE"
+    assert "guest not ready" in d.reason.lower()
+
+
+def test_guest_ready_true_still_takes_guest_camera():
+    stack = cams(**{"CAM-GUEST": {"guest_ready": True}})
+    d = decide(now_cue(), stack, base_state(), NOW)
+    assert d.action == DecisionAction.TAKE
+    assert d.camera_id == "CAM-GUEST"
+
+
+def test_guest_ready_absent_defaults_true():
+    stack = cams()  # no guest_ready key at all
+    for cam in stack.values():
+        assert "guest_ready" not in cam
+    d = decide(now_cue(), stack, base_state(), NOW)
+    assert d.action == DecisionAction.TAKE
+    assert d.camera_id == "CAM-GUEST"
+
+
 def test_every_decision_carries_reason():
     outputs = [
         decide(now_cue(), cams(), base_state(), NOW),

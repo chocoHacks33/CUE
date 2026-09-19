@@ -26,6 +26,8 @@ from cue_api.contracts import (
     ReceiverTokenResponse,
     TopologyResponse,
 )
+from cue_api.control import ControlSessionStore, ControlStore
+from cue_api.control_socket import ControlHub, build_control_router, build_control_websocket
 from cue_api.guests import GuestRegistry, ObservationStore, build_guest_router
 from cue_api.livekit_tokens import (
     LiveKitPublisherTokenIssuer,
@@ -33,6 +35,7 @@ from cue_api.livekit_tokens import (
     PublisherTokenIssuer,
     ReceiverTokenIssuer,
 )
+from cue_api.readiness import ReadinessStore
 from cue_api.settings import Settings
 
 EventIdPath = Annotated[
@@ -58,6 +61,10 @@ def create_app(
         grant_ttl_seconds=app_settings.cue_pairing_ttl_seconds,
         claim_ttl_seconds=app_settings.cue_claim_ttl_seconds,
     )
+    control_store = ControlStore()
+    control_sessions = ControlSessionStore()
+    control_hub = ControlHub()
+    readiness_store = ReadinessStore()
 
     app = FastAPI(
         title="CUE API",
@@ -375,6 +382,22 @@ def create_app(
         ]
 
     app.include_router(build_guest_router(app_settings, registry, observations))
+    app.include_router(
+        build_control_router(
+            control_store,
+            control_sessions,
+            control_hub,
+            readiness_store,
+            require_producer,
+        )
+    )
+    app.add_api_websocket_route(
+        "/api/v1/events/{event_id}/control",
+        build_control_websocket(control_store, control_sessions, control_hub, readiness_store),
+    )
+    app.state.control_store = control_store
+    app.state.control_sessions = control_sessions
+    app.state.readiness_store = readiness_store
 
     return app
 

@@ -38,6 +38,12 @@
       "type": "number",
       "default": 0.0,
       "description": "Producer clock seconds when the cue was minted. Used by the director to reject cues older than CUE_LIFETIME_S (3s)."
+    },
+    "mode_revision": {
+      "type": "integer",
+      "default": 0,
+      "minimum": 0,
+      "description": "DirectorSession.mode_revision captured by SemanticQueue at submit time. If the cue arrives after the session's mode_revision has advanced (manual HOLD/RESUME_AUTO/TAKE/SLATE or reconnect), the session rejects it as stale. This is how late AI answers issued before a manual HOLD get dropped."
     }
   },
   "examples": [

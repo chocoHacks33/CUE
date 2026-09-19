@@ -64,6 +64,8 @@ class Cue(BaseModel):
     evidence_text: str            # exact words from the transcript that justify this
     utterance_id: str = ""        # groups clauses in one utterance (correction detection)
     created_at: float = 0.0       # producer clock seconds; used for staleness
+    # DirectorSession's mode_revision at submit time; older cues rejected.
+    mode_revision: int = 0
 
 
 SYSTEM = """You interpret a live event host's speech for a camera director.
