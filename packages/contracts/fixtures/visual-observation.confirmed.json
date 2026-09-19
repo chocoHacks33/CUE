@@ -1,0 +1,50 @@
+{
+  "visionContractVersion": "0.1.0",
+  "observationId": "obs-cam-guest-3-4821",
+  "eventId": "hackmit-demo",
+  "cameraId": "CAM-GUEST",
+  "streamEpoch": 3,
+  "trackKey": "CAM-GUEST:3:face-7",
+  "frameSequence": 4821,
+  "status": "CONFIRMED",
+  "subject": {
+    "guestId": "guest-sarah",
+    "displayName": "Sarah",
+    "referenceVersion": 2
+  },
+  "box": { "x": 0.41, "y": 0.22, "width": 0.17, "height": 0.3 },
+  "quality": {
+    "passed": true,
+    "score": 0.82,
+    "faceWidthRatio": 0.17,
+    "sharpness": 0.71,
+    "brightness": 0.54,
+    "detectorScore": 0.93,
+    "failedChecks": []
+  },
+  "match": {
+    "calibratedConfidence": 0.94,
+    "calibrationId": "sface-cosine-provisional-v1",
+    "calibrationStatus": "PROVISIONAL_DEFAULT",
+    "margin": 0.21,
+    "similarity": 0.58,
+    "runnerUpGuestId": "guest-daniel",
+    "consecutiveConfirmations": 3
+  },
+  "provenance": {
+    "pipelineVersion": "cue-vision/0.1.0",
+    "detector": "opencv-yunet",
+    "detectorVersion": "2023mar",
+    "embedder": "opencv-sface",
+    "embedderVersion": "2021dec",
+    "galleryVersion": 7
+  },
+  "timing": {
+    "capturedAtMs": 1758294000120,
+    "observedAtMs": 1758294000185,
+    "expiresAtMs": 1758294001685,
+    "clockDomain": "WORKER_MONOTONIC_MAPPED",
+    "clockUncertaintyMs": 35
+  },
+  "usableForNamedTake": true
+}

@@ -17,3 +17,7 @@ __pycache__/
 Thumbs.db
 recordings/
 artifacts/
+
+# Vision model weights: downloaded per machine, never committed.
+models/
+*.onnx
