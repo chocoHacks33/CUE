@@ -1,0 +1,7 @@
+{
+  "guests": [
+    {"id": "sarah",  "name": "Sarah Tan",    "aliases": ["Sarah", "Ms Tan"],   "role": "guest of honour"},
+    {"id": "daniel", "name": "Daniel Reyes", "aliases": ["Daniel", "Dan"],     "role": "speaker"},
+    {"id": "priya",  "name": "Priya Shah",   "aliases": ["Priya"],             "role": "judge"}
+  ]
+}

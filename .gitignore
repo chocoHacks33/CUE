@@ -1,0 +1,5 @@
+.env
+__pycache__/
+node_modules/
+tests/**/results_*.json
+.venv/
