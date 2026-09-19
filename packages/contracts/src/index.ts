@@ -52,6 +52,82 @@ export interface PublisherTokenResponse {
   expiresInSeconds: number;
 }
 
+export interface PairingGrantRequest {
+  cameraId: CameraId;
+}
+
+export interface PairingGrantResponse {
+  contractVersion: typeof CONTRACT_VERSION;
+  grantId: string;
+  pairingToken: string;
+  verificationCode: string;
+  camera: CameraContract;
+  expiresInSeconds: number;
+}
+
+export interface PairingClaimRequest {
+  pairingToken: string;
+  displayName: string;
+  deviceLabel: string;
+}
+
+export type PairingClaimStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "REJECTED"
+  | "ISSUING"
+  | "EXCHANGED"
+  | "EXPIRED";
+
+export interface PairingClaimResponse {
+  contractVersion: typeof CONTRACT_VERSION;
+  claimId: string;
+  claimSecret: string;
+  verificationCode: string;
+  camera: CameraContract;
+  status: PairingClaimStatus;
+  expiresInSeconds: number;
+}
+
+export interface PairingStatusRequest {
+  claimId: string;
+  claimSecret: string;
+}
+
+export interface PairingStatusResponse {
+  contractVersion: typeof CONTRACT_VERSION;
+  claimId: string;
+  verificationCode: string;
+  camera: CameraContract;
+  status: PairingClaimStatus;
+  expiresInSeconds: number;
+}
+
+export interface ProducerPairingClaimResponse extends PairingStatusResponse {
+  displayName: string;
+  deviceLabel: string;
+}
+
+export interface PairingDecisionRequest {
+  approved: boolean;
+}
+
+export interface PairingExchangeResponse extends PublisherTokenResponse {
+  deviceSessionId: string;
+  streamEpoch: number;
+}
+
+export interface CameraBinding {
+  contractVersion: typeof CONTRACT_VERSION;
+  eventId: string;
+  cameraId: CameraId;
+  participantIdentity: string;
+  deviceSessionId: string;
+  displayName: string;
+  currentVideoTrackSid: string | null;
+  streamEpoch: number;
+}
+
 export function isCameraId(value: string): value is CameraId {
   return CAMERA_IDS.includes(value as CameraId);
 }
@@ -96,6 +172,7 @@ export interface PublisherMetadata {
   role: CameraRole;
   audioPolicy: AudioPolicy;
   streamEpoch: number;
+  deviceSessionId?: string;
 }
 
 /**
@@ -115,12 +192,19 @@ export function parsePublisherMetadata(raw: string | null | undefined): Publishe
   if (typeof value !== "object" || value === null) return null;
 
   const candidate = value as Record<string, unknown>;
-  const { cameraId, eventId, contractVersion, streamEpoch, role, audioPolicy } = candidate;
+  const { cameraId, eventId, contractVersion, streamEpoch, role, audioPolicy, deviceSessionId } =
+    candidate;
 
   if (typeof cameraId !== "string" || !isCameraId(cameraId)) return null;
   if (typeof eventId !== "string" || eventId.length === 0) return null;
   if (typeof contractVersion !== "string" || contractVersion.length === 0) return null;
   if (typeof streamEpoch !== "number" || !Number.isInteger(streamEpoch) || streamEpoch < 1) {
+    return null;
+  }
+  if (
+    deviceSessionId !== undefined &&
+    (typeof deviceSessionId !== "string" || deviceSessionId.length === 0)
+  ) {
     return null;
   }
 
@@ -134,7 +218,98 @@ export function parsePublisherMetadata(raw: string | null | undefined): Publishe
     role: contract.role,
     audioPolicy: contract.audioPolicy,
     streamEpoch,
+    ...(deviceSessionId ? { deviceSessionId } : {}),
   };
+}
+
+export type PixelFormat = "RGB24" | "BGR24" | "RGBA32";
+export type SampleFormat = "S16LE" | "F32LE";
+
+export interface DecodedFrameDescriptor {
+  eventId: string;
+  cameraId: CameraId;
+  streamEpoch: number;
+  trackSid: string;
+  sequence: number;
+  width: number;
+  height: number;
+  strideBytes: number;
+  pixelFormat: PixelFormat;
+  orientationDegrees: 0 | 90 | 180 | 270;
+  mirrored: boolean;
+  receivedAtMonotonicS: number;
+  captureTimeS: number | null;
+}
+
+export interface DecodedAudioDescriptor {
+  eventId: string;
+  cameraId: "CAM-HOST";
+  masterTrackSid: string;
+  audioEpoch: number;
+  sequence: number;
+  sampleRateHz: number;
+  channels: 1 | 2;
+  sampleFormat: SampleFormat;
+  sampleOffset: number;
+  sampleFrameCount: number;
+  receivedAtMonotonicS: number;
+}
+
+export function isDecodedFrameDescriptor(value: unknown): value is DecodedFrameDescriptor {
+  if (typeof value !== "object" || value === null) return false;
+  const frame = value as Record<string, unknown>;
+  const pixelFormats: readonly string[] = ["RGB24", "BGR24", "RGBA32"];
+  const orientations: readonly number[] = [0, 90, 180, 270];
+  const bytesPerPixel = frame.pixelFormat === "RGBA32" ? 4 : 3;
+  return (
+    typeof frame.eventId === "string" &&
+    typeof frame.cameraId === "string" &&
+    isCameraId(frame.cameraId) &&
+    Number.isInteger(frame.streamEpoch) &&
+    (frame.streamEpoch as number) >= 1 &&
+    typeof frame.trackSid === "string" &&
+    Number.isInteger(frame.sequence) &&
+    (frame.sequence as number) >= 0 &&
+    Number.isInteger(frame.width) &&
+    (frame.width as number) > 0 &&
+    Number.isInteger(frame.height) &&
+    (frame.height as number) > 0 &&
+    Number.isInteger(frame.strideBytes) &&
+    pixelFormats.includes(frame.pixelFormat as string) &&
+    (frame.strideBytes as number) >= (frame.width as number) * bytesPerPixel &&
+    orientations.includes(frame.orientationDegrees as number) &&
+    typeof frame.mirrored === "boolean" &&
+    typeof frame.receivedAtMonotonicS === "number" &&
+    Number.isFinite(frame.receivedAtMonotonicS) &&
+    frame.receivedAtMonotonicS >= 0 &&
+    (frame.captureTimeS === null || typeof frame.captureTimeS === "number")
+  );
+}
+
+export function isDecodedAudioDescriptor(value: unknown): value is DecodedAudioDescriptor {
+  if (typeof value !== "object" || value === null) return false;
+  const audio = value as Record<string, unknown>;
+  return (
+    typeof audio.eventId === "string" &&
+    audio.cameraId === "CAM-HOST" &&
+    typeof audio.masterTrackSid === "string" &&
+    Number.isInteger(audio.audioEpoch) &&
+    (audio.audioEpoch as number) >= 1 &&
+    Number.isInteger(audio.sequence) &&
+    (audio.sequence as number) >= 0 &&
+    Number.isInteger(audio.sampleRateHz) &&
+    (audio.sampleRateHz as number) >= 8_000 &&
+    (audio.sampleRateHz as number) <= 192_000 &&
+    (audio.channels === 1 || audio.channels === 2) &&
+    (audio.sampleFormat === "S16LE" || audio.sampleFormat === "F32LE") &&
+    Number.isInteger(audio.sampleOffset) &&
+    (audio.sampleOffset as number) >= 0 &&
+    Number.isInteger(audio.sampleFrameCount) &&
+    (audio.sampleFrameCount as number) > 0 &&
+    typeof audio.receivedAtMonotonicS === "number" &&
+    Number.isFinite(audio.receivedAtMonotonicS) &&
+    audio.receivedAtMonotonicS >= 0
+  );
 }
 
 export * from "./vision";

@@ -21,7 +21,16 @@ class IssuedPublisherToken:
 
 
 class PublisherTokenIssuer(Protocol):
-    def issue(self, event_id: str, camera_id: CameraId, display_name: str) -> IssuedPublisherToken:
+    def issue(
+        self,
+        event_id: str,
+        camera_id: CameraId,
+        display_name: str,
+        *,
+        participant_identity: str | None = None,
+        stream_epoch: int = 1,
+        device_session_id: str | None = None,
+    ) -> IssuedPublisherToken:
         """Issue one publisher credential using a server-owned camera contract."""
 
 
@@ -29,13 +38,22 @@ class LiveKitPublisherTokenIssuer:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
-    def issue(self, event_id: str, camera_id: CameraId, display_name: str) -> IssuedPublisherToken:
+    def issue(
+        self,
+        event_id: str,
+        camera_id: CameraId,
+        display_name: str,
+        *,
+        participant_identity: str | None = None,
+        stream_epoch: int = 1,
+        device_session_id: str | None = None,
+    ) -> IssuedPublisherToken:
         if not self._settings.livekit_configured:
             raise RuntimeError("LiveKit is not configured")
 
         contract = CAMERA_CONTRACTS[camera_id]
         room_name = f"cue-{event_id}"
-        participant_identity = f"publisher:{event_id}:{camera_id.value}"
+        participant_identity = participant_identity or f"publisher:{event_id}:{camera_id.value}"
         expires_in_seconds = self._settings.cue_token_ttl_minutes * 60
         publish_sources = ["camera"]
         if contract.audio_policy.value == "MASTER":
@@ -48,7 +66,8 @@ class LiveKitPublisherTokenIssuer:
                 "cameraId": camera_id.value,
                 "role": contract.role.value,
                 "audioPolicy": contract.audio_policy.value,
-                "streamEpoch": 1,
+                "streamEpoch": stream_epoch,
+                **({"deviceSessionId": device_session_id} if device_session_id else {}),
             },
             separators=(",", ":"),
         )
