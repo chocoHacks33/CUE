@@ -1,6 +1,15 @@
-"""Run the adversarial set against one or more models.
-Usage: python tests/semantics/run_semantic.py --models MODEL_A MODEL_B [--only FUTURE] [--repeat 1]
-Gate for M1: pass rate >= 90%, zero wrong SHOW cuts, p95 latency recorded.
+"""Run one of the semantic evaluation sets against one or more models.
+
+Usage:
+  python tests/semantics/run_semantic.py --models MODEL_A MODEL_B \\
+      [--set dev|heldout] [--only CATEGORY] [--repeat N]
+
+Sets:
+  dev      -> adversarial.json (development corpus; use for tuning)
+  heldout  -> heldout.json     (release set; NEVER touch to tune the prompt)
+
+Gate for M1: pass rate >= 90% on dev, zero wrong SHOW cuts, p95 latency recorded.
+Release gate uses heldout with the pinned model + prompt.
 """
 import argparse, json, statistics, sys, time
 from pathlib import Path
@@ -9,7 +18,19 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "services" / "worker"))
 from semantics.parser import parse  # noqa: E402
 
-CASES = json.loads((Path(__file__).parent / "adversarial.json").read_text())
+SETS = {
+    "dev": "adversarial.json",
+    "heldout": "heldout.json",
+}
+
+
+def load_cases(set_name):
+    path = Path(__file__).parent / SETS[set_name]
+    data = json.loads(path.read_text())
+    if isinstance(data, dict):
+        return data.get("cases", []), data.get("note", "")
+    return data, ""
+
 
 def check(case, cue):
     if cue.action.value not in case["action"]:
@@ -18,9 +39,10 @@ def check(case, cue):
         return sorted(cue.target_guest_ids) == sorted(case["target_guest_ids"])
     return True
 
-def run(model, only, repeat):
+
+def run(cases, set_name, model, only, repeat):
     rows, lat = [], []
-    for case in CASES:
+    for case in cases:
         if only and case["cat"] != only:
             continue
         for _ in range(repeat):
@@ -35,22 +57,31 @@ def run(model, only, repeat):
                   f'{cue.action.value:4} {cue.target_guest_ids}  "{case["say"]}"')
     lat.sort()
     passed = sum(r["ok"] for r in rows)
-    summary = {"model": model, "cases": len(rows), "passed": passed,
-               "pass_rate": round(passed / len(rows), 3),
+    summary = {"set": set_name, "model": model, "cases": len(rows), "passed": passed,
+               "pass_rate": round(passed / len(rows), 3) if rows else 0.0,
                "wrong_cuts": sum(r["wrong_cut"] for r in rows),
-               "p50_ms": round(statistics.median(lat)),
-               "p95_ms": round(lat[int(0.95 * (len(lat) - 1))])}
-    out = Path(__file__).parent / f"results_{model.replace('/', '_')}_{int(time.time())}.json"
+               "p50_ms": round(statistics.median(lat)) if lat else 0,
+               "p95_ms": round(lat[int(0.95 * (len(lat) - 1))]) if lat else 0}
+    out = Path(__file__).parent / f"results_{set_name}_{model.replace('/', '_')}_{int(time.time())}.json"
     out.write_text(json.dumps({"summary": summary, "rows": rows}, indent=2))
     return summary
+
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--models", nargs="+", required=True)
+    ap.add_argument("--set", dest="set_name", choices=list(SETS), default="dev",
+                    help="which evaluation set to run (default: dev)")
     ap.add_argument("--only", help="run one category, e.g. FUTURE")
     ap.add_argument("--repeat", type=int, default=1)
     a = ap.parse_args()
-    summaries = [run(m, a.only, a.repeat) for m in a.models]
+
+    cases, note = load_cases(a.set_name)
+    print(f"# set: {a.set_name}  ({len(cases)} cases from {SETS[a.set_name]})")
+    if note:
+        print(f"# note: {note}")
+
+    summaries = [run(cases, a.set_name, m, a.only, a.repeat) for m in a.models]
     print("\n=== SUMMARY ===")
     for s in summaries:
         print(json.dumps(s))

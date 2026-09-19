@@ -1,7 +1,11 @@
 {
   "guests": [
-    {"id": "sarah",  "name": "Sarah Tan",    "aliases": ["Sarah", "Ms Tan"],   "role": "guest of honour"},
-    {"id": "daniel", "name": "Daniel Reyes", "aliases": ["Daniel", "Dan"],     "role": "speaker"},
-    {"id": "priya",  "name": "Priya Shah",   "aliases": ["Priya"],             "role": "judge"}
+    {"id": "sarah",  "name": "Sarah Tan",       "aliases": ["Sarah", "Ms Tan"],       "role": "guest of honour"},
+    {"id": "daniel", "name": "Daniel Reyes",    "aliases": ["Daniel", "Dan"],         "role": "speaker"},
+    {"id": "priya",  "name": "Priya Shah",      "aliases": ["Priya"],                 "role": "judge"},
+    {"id": "maya",   "name": "Maya Chen",       "aliases": ["Maya", "Ms Chen"],       "role": "keynote"},
+    {"id": "alex",   "name": "Alex Rivera",     "aliases": ["Alex"],                  "role": "founder"},
+    {"id": "jordan", "name": "Jordan Lee",      "aliases": ["Jordan", "Jordy"],       "role": "moderator"},
+    {"id": "kai",    "name": "Kai Nakamura",    "aliases": ["Kai"],                   "role": "special guest"}
   ]
 }

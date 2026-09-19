@@ -36,7 +36,7 @@ Correctly deciding NOT to cut is a core feature.
 ## Clause and correction rule
 Act on each finished clause for speed. If a correction follows within the
 same utterance ("Sarah, actually Daniel"), allow one fast re-cut. Minimum
-shot length 1.5 s otherwise.
+shot length 2.5 s otherwise (matches v3 plan section "Directing logic C owns").
 
 ## How to work with me
 - Start every reply by naming the milestone you are advancing.
