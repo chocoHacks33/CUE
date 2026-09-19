@@ -10,8 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from cue_api.vision.models import DEFAULT_MODEL_DIR, SFACE, YUNET, verify
-from cue_api.vision.types import DecodedFrame, Embedding, FaceDetection, PixelBox
+from cue_api.guests.face_models import DEFAULT_MODEL_DIR, SFACE, YUNET, verify
+from cue_api.guests.types import DecodedFrame, Embedding, FaceDetection, PixelBox
 
 
 def _import_cv2() -> Any:

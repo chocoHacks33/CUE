@@ -3,8 +3,8 @@
 These files are the shared source of truth for Person B's vision and consent
 vocabulary. The same bytes are validated by:
 
-- `packages/contracts/src/vision.test.ts` (rules, on inline equivalents)
-- `apps/web/src/guests/visionContract.test.ts` (observation fixture bytes)
+- `packages/contracts/src/guests.test.ts` (rules, on inline equivalents)
+- `apps/web/src/guests/guestContract.test.ts` (observation fixture bytes)
 - `apps/web/src/guests/consentFixtures.test.ts` (consent fixture bytes)
 - `apps/api/tests/test_guest_contracts.py` (Python, pydantic models)
 - `apps/api/tests/test_guest_registry.py` (the registry that enforces consent)

@@ -15,7 +15,7 @@ drifting.
 
 | File | What it does |
 |---|---|
-| `packages/contracts/src/vision.ts` | TypeScript types + runtime parsers: observation, guest, consent, enrolment, purge |
+| `packages/contracts/src/guests.ts` | TypeScript types + runtime parsers: observation, guest, consent, enrolment, purge |
 | `apps/api/src/cue_api/guests/contracts.py` | Pydantic mirror, same rules, strict (unknown fields rejected) |
 | `packages/contracts/fixtures/` | The shared bytes both sides validate |
 
@@ -65,7 +65,7 @@ contract-only for now. `calibratedConfidence` can only ever be
 | File | Tests |
 |---|---|
 | `apps/api/tests/test_guest_contracts.py` | 26 |
-| `apps/web/src/guests/visionContract.test.ts` | fixture parsing + named-take gate |
+| `apps/web/src/guests/guestContract.test.ts` | fixture parsing + named-take gate |
 | `apps/web/src/guests/consentFixtures.test.ts` | consent, enrolment, reference and purge fixtures |
 | `packages/contracts/src/vision.test.ts` | the rules, on inline equivalents |
 

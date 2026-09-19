@@ -10,7 +10,7 @@ import math
 
 import pytest
 
-from cue_api.vision.gallery import (
+from cue_api.guests.reference_gallery import (
     GuestReferences,
     ReferenceGallery,
     cosine_similarity,

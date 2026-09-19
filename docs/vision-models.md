@@ -16,7 +16,7 @@ Weights are **not** committed. `models/` is ignored by Git.
 
 A checksum written from memory would pass review and prove nothing. The values
 stay empty until someone downloads the files and records the digest of what they
-actually got. `apps/api/tests/test_vision_models.py` asserts that nothing is pinned
+actually got. `apps/api/tests/test_guest_face_models.py` asserts that nothing is pinned
 until that happens, so this page and the code cannot drift apart.
 
 ## Pinning procedure
@@ -26,12 +26,12 @@ cd apps/api
 mkdir -p models
 # download both .onnx files from the source links above into models/
 python -m pip install -e ".[dev]"
-python -m cue_api.vision.cli models --model-dir models
+python -m cue_api.guests.enrolment_cli models --model-dir models
 ```
 
 The command prints each file's `sha256`. For each one:
 
-1. Paste the digest into `expected_sha256` in `src/cue_api/vision/models.py`.
+1. Paste the digest into `expected_sha256` in `src/cue_api/guests/face_models.py`.
 2. Paste the same digest into the table above and set "SHA-256 pinned" to YES.
 3. Open the upstream `LICENSE` file next to the model, confirm the licence text
    matches the declared licence, then set `licence_verified=True` and update the

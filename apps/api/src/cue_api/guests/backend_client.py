@@ -14,7 +14,7 @@ import urllib.request
 from collections.abc import Sequence
 from typing import Any
 
-from cue_api.vision.gallery import ReferenceGallery
+from cue_api.guests.reference_gallery import ReferenceGallery
 
 OPERATOR_HEADER = "X-CUE-Bootstrap-Secret"
 

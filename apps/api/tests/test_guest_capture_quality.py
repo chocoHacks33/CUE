@@ -1,4 +1,4 @@
-"""Capture-quality gate tests for cue_api.vision.quality.
+"""Capture-quality gate tests for cue_api.guests.capture_quality.
 
 The frames and detections here are deterministic stand-ins, not recognition.
 They cover the policy around the models; real YuNet/SFace behaviour is only
@@ -7,8 +7,8 @@ established by the Mac runtime check in `docs/results/b-identity-report.template
 
 from __future__ import annotations
 
-from cue_api.vision.quality import QualityPolicy, assess
-from cue_api.vision.types import DecodedFrame, FaceDetection, PixelBox
+from cue_api.guests.capture_quality import QualityPolicy, assess
+from cue_api.guests.types import DecodedFrame, FaceDetection, PixelBox
 
 FRAME_WIDTH = 1280
 FRAME_HEIGHT = 720

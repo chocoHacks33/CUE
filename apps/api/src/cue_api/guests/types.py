@@ -1,4 +1,4 @@
-"""Value types shared across the vision pipeline.
+"""Internal value types for guest face capture.
 
 The core carries no numeric dependency: an embedding is a tuple of floats and a
 frame's pixels are an opaque object only the OpenCV adapters ever touch. That is
@@ -8,25 +8,13 @@ what lets this package import and test on A's, B's, C's and D's machines alike.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import StrEnum
 from typing import Any
 
+# The status vocabularies live with the wire contract, so the internal value
+# types and the JSON both mean exactly the same thing by CONFIRMED.
+from cue_api.guests.contracts import CalibrationStatus, ObservationStatus
+
 Embedding = tuple[float, ...]
-
-
-class ObservationStatus(StrEnum):
-    CONFIRMED = "CONFIRMED"
-    PROVISIONAL = "PROVISIONAL"
-    AMBIGUOUS = "AMBIGUOUS"
-    UNKNOWN = "UNKNOWN"
-    LOW_QUALITY = "LOW_QUALITY"
-    NO_FACE = "NO_FACE"
-
-
-class CalibrationStatus(StrEnum):
-    MEASURED = "MEASURED"
-    PROVISIONAL_DEFAULT = "PROVISIONAL_DEFAULT"
-    UNCALIBRATED = "UNCALIBRATED"
 
 
 @dataclass(frozen=True)
@@ -95,3 +83,13 @@ class FaceDetection:
     sharpness: float
     brightness: float
     landmarks: tuple[tuple[float, float], ...] = field(default=())
+
+
+__all__ = [
+    "CalibrationStatus",
+    "DecodedFrame",
+    "Embedding",
+    "FaceDetection",
+    "ObservationStatus",
+    "PixelBox",
+]
