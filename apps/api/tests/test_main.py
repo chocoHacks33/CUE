@@ -119,6 +119,26 @@ def test_livekit_grants_enforce_camera_specific_audio_policy() -> None:
     assert metadata["streamEpoch"] == 1
 
 
+def test_stage1_livekit_token_carries_authoritative_session_binding() -> None:
+    issuer = LiveKitPublisherTokenIssuer(configured_settings())
+
+    issued = issuer.issue(
+        "hackmit-demo",
+        CameraId.HOST,
+        "Person A",
+        participant_identity="publisher:hackmit-demo:CAM-HOST:session123",
+        stream_epoch=3,
+        device_session_id="session123",
+    )
+    claims = jwt.decode(issued.token, options={"verify_signature": False})
+    metadata = json.loads(claims["metadata"])
+
+    assert claims["sub"] == "publisher:hackmit-demo:CAM-HOST:session123"
+    assert metadata["cameraId"] == "CAM-HOST"
+    assert metadata["streamEpoch"] == 3
+    assert metadata["deviceSessionId"] == "session123"
+
+
 def test_invalid_event_slug_is_rejected_before_issuer() -> None:
     issuer = FakeIssuer()
     client = TestClient(create_app(settings=configured_settings(), token_issuer=issuer))

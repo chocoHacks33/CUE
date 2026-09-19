@@ -9,7 +9,11 @@ CONTRACT_VERSION = "0.1.0"
 
 
 class ContractModel(BaseModel):
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    model_config = ConfigDict(
+        alias_generator=to_camel,
+        populate_by_name=True,
+        str_strip_whitespace=True,
+    )
 
 
 class CameraId(StrEnum):
@@ -72,6 +76,74 @@ class PublisherTokenResponse(ContractModel):
     room_name: str
     camera: CameraContract
     expires_in_seconds: int
+
+
+class PairingGrantRequest(ContractModel):
+    camera_id: CameraId
+
+
+class PairingGrantResponse(ContractModel):
+    contract_version: str = CONTRACT_VERSION
+    grant_id: str
+    pairing_token: str
+    verification_code: str
+    camera: CameraContract
+    expires_in_seconds: int
+
+
+class PairingClaimRequest(ContractModel):
+    pairing_token: str = Field(min_length=32, max_length=256)
+    display_name: str = Field(min_length=1, max_length=64)
+    device_label: str = Field(min_length=1, max_length=80)
+
+
+class PairingClaimResponse(ContractModel):
+    contract_version: str = CONTRACT_VERSION
+    claim_id: str
+    claim_secret: str
+    verification_code: str
+    camera: CameraContract
+    status: str
+    expires_in_seconds: int
+
+
+class PairingDecisionRequest(ContractModel):
+    approved: bool
+
+
+class PairingStatusRequest(ContractModel):
+    claim_id: str = Field(min_length=8, max_length=80)
+    claim_secret: str = Field(min_length=32, max_length=256)
+
+
+class PairingStatusResponse(ContractModel):
+    contract_version: str = CONTRACT_VERSION
+    claim_id: str
+    status: str
+    verification_code: str
+    camera: CameraContract
+    expires_in_seconds: int
+
+
+class ProducerPairingClaimResponse(PairingStatusResponse):
+    display_name: str
+    device_label: str
+
+
+class PairingExchangeResponse(PublisherTokenResponse):
+    device_session_id: str
+    stream_epoch: int = Field(ge=1)
+
+
+class CameraBindingResponse(ContractModel):
+    contract_version: str = CONTRACT_VERSION
+    event_id: str
+    camera_id: CameraId
+    participant_identity: str
+    device_session_id: str
+    display_name: str
+    current_video_track_sid: str | None = None
+    stream_epoch: int = Field(ge=1)
 
 
 class TopologyResponse(ContractModel):
