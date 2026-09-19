@@ -11,7 +11,7 @@ Correctly deciding NOT to cut is a core feature.
 ## Stack
 - Video: LiveKit Cloud (WebRTC). UI: React + TypeScript (Vite).
 - Backend: Python 3.11+, FastAPI. Speech: Deepgram streaming.
-- Meaning: OpenAI structured output (see semantic/parser.py).
+- Meaning: OpenAI structured output (see services/worker/semantics/parser.py).
 - Face identity (YuNet + SFace) is optional and last.
 
 ## Hard rules
@@ -47,8 +47,14 @@ shot length 1.5 s otherwise.
 
 ## Commands
 - Install: `pip install -r requirements.txt`
-- Semantic tests: `python tests/run_semantic.py --models <model_id>`
+- Semantic tests: `python tests/semantics/run_semantic.py --models <model_id>`
+- Policy tests:   `pytest tests/policy`
 
 ## Layout
-semantic/  parser, prompt, schema      tests/  adversarial set + runner
-backend/   FastAPI + director (M3+)    web/    React app (M2+)
+services/worker/semantics/  parser, prompt, schema (C)
+services/worker/{speech,vision}/  ASR (C), face id (B); ingest/runtime (A)
+services/api/policy/        deterministic director (C)
+services/api/{auth,devices,control,logs}/  admission, tokens, control (A)
+apps/web/{publisher,producer,compositor,recording}/  browser UIs (A, D)
+tests/semantics/  adversarial set + runner
+tests/policy/     director unit tests

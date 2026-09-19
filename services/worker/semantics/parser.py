@@ -50,6 +50,8 @@ class Cue(BaseModel):
     temporal_intent: TemporalIntent
     action: Action
     evidence_text: str            # exact words from the transcript that justify this
+    utterance_id: str = ""        # groups clauses from one continuous utterance (correction detection)
+    created_at: float = 0.0       # producer clock seconds when this cue was minted (staleness)
 
 SYSTEM = """You interpret a live event host's speech for a camera director.
 Return the MEANING of the latest utterance. You never choose a camera.

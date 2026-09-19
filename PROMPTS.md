@@ -9,8 +9,9 @@ CLAUDE.md reloads automatically each session.
 Then run `git init` and make the first commit."
 
 ## M1 Semantic brain
-"M1. Check that semantic/parser.py matches the installed openai SDK and fix the
-call if needed. Run `python tests/run_semantic.py --models <A> <B>` with two
+"M1. Check that services/worker/semantics/parser.py matches the installed
+openai SDK and fix the call if needed.
+Run `python tests/semantics/run_semantic.py --models <A> <B>` with two
 fast models I have access to. Show me the summary table. For every FAIL, tell me
 whether the prompt, the test expectation, or the model is at fault. Change only
 the prompt in SYSTEM. Do not special-case any test sentence."
@@ -35,18 +36,20 @@ Gate: 5 minutes of switching with no audio glitch. Commit.
 ## M4 Live speech to meaning
 "M4. Backend subscribes to camera A audio, streams it to Deepgram with interim
 results and roster names as keywords. On each finished clause call
-semantic.parser.parse and push the Cue plus latency to the desk over WebSocket.
+services.worker.semantics.parser.parse and push the Cue plus latency to the
+desk over WebSocket.
 Show transcript and Cue live. No camera control yet."
 
 Gate: say five test sentences aloud in the noisy hall. Log the end to end
 latency from last word to Cue. Commit.
 
 ## M5 Director
-"M5. Add backend/director.py: pure function (cue, camera_state, roster_map,
-now) -> decision. Roster map: sarah=B, daniel=B, host=A, wide=C. Rules: min shot
-1.5 s, one fast re-cut allowed on correction, unhealthy camera -> wide, manual
-key press always wins and sets HOLD for 5 s. Unit tests first, then wire it to
-the desk."
+"M5. Add services/api/policy/director.py: pure function
+decide(cue, cameras, state, now, *, role_based=False, role_map=None)
+-> Decision. Rules: min shot 2.5 s, one fast re-cut allowed on same-utterance
+correction, unhealthy camera -> wide, manual HOLD always wins and sets
+hold_until for 5 s, stale cue (>3 s) rejected, identity max age 1.5 s.
+Unit tests in tests/policy/test_director.py first, then wire it to the desk."
 
 Gate: 'Sarah later' holds. 'Sarah, join us now' takes B. Commit.
 
