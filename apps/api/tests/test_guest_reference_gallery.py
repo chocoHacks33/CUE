@@ -9,6 +9,7 @@ from __future__ import annotations
 import math
 
 import pytest
+from conftest import DANIEL, SARAH
 
 from cue_api.guests.reference_gallery import (
     GuestReferences,
@@ -16,32 +17,6 @@ from cue_api.guests.reference_gallery import (
     cosine_similarity,
     normalise,
 )
-
-# Two orthogonal unit vectors stand in for enrolled faces. They are fixtures,
-# not recognition: no embedder has ever run on this machine.
-SARAH = normalise((1.0, 0.0, 0.0, 0.0))
-DANIEL = normalise((0.0, 1.0, 0.0, 0.0))
-
-
-@pytest.fixture
-def gallery() -> ReferenceGallery:
-    return ReferenceGallery(
-        version=7,
-        guests=(
-            GuestReferences(
-                guest_id="guest-sarah",
-                display_name="Sarah",
-                reference_version=2,
-                embeddings=(SARAH,),
-            ),
-            GuestReferences(
-                guest_id="guest-daniel",
-                display_name="Daniel",
-                reference_version=1,
-                embeddings=(DANIEL,),
-            ),
-        ),
-    )
 
 
 def payload(**overrides: object) -> dict[str, object]:
