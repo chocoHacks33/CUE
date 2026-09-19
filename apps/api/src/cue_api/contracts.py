@@ -85,3 +85,24 @@ class HealthResponse(ContractModel):
     service: str = "cue-api"
     contract_version: str = CONTRACT_VERSION
     livekit_configured: bool
+
+
+class ReceiverRole(StrEnum):
+    DIRECTOR = "DIRECTOR"
+    OBSERVER = "OBSERVER"
+
+
+class ReceiverTokenRequest(ContractModel):
+    event_id: str = Field(min_length=3, max_length=48, pattern=r"^[a-z0-9][a-z0-9-]*$")
+    display_name: str = Field(min_length=1, max_length=64)
+    receiver_role: ReceiverRole = ReceiverRole.DIRECTOR
+
+
+class ReceiverTokenResponse(ContractModel):
+    contract_version: str = CONTRACT_VERSION
+    server_url: str
+    participant_token: str
+    participant_identity: str
+    room_name: str
+    receiver_role: ReceiverRole
+    expires_in_seconds: int
