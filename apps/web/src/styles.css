@@ -623,3 +623,63 @@ footer {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+/* ---- Stage 3: mode strip, banners, evidence ---- */
+
+.mode-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  border: 1px solid #3b445f;
+  border-radius: 12px;
+  padding: 10px 14px;
+  background: #0a0f1d;
+}
+
+.mode-label {
+  display: inline-block;
+  margin-right: 12px;
+  font-size: 1.15rem;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.mode-sub {
+  color: #aeb6ce;
+  font-size: 0.78rem;
+}
+
+.mode-assist { border-color: rgba(141, 131, 255, 0.5); }
+.mode-auto { border-color: rgba(56, 224, 158, 0.55); }
+.mode-manual-hold { border-color: rgba(255, 196, 77, 0.6); }
+.mode-degraded { border-color: rgba(255, 93, 88, 0.7); background: rgba(255, 93, 88, 0.08); }
+
+.banner {
+  margin: 0;
+  border-radius: 10px;
+  padding: 10px 12px;
+  font-size: 0.84rem;
+  font-weight: 600;
+}
+
+.banner-error {
+  border: 1px solid rgba(255, 93, 88, 0.6);
+  color: #ffb3b0;
+  background: rgba(255, 93, 88, 0.12);
+}
+
+.banner-warn {
+  border: 1px solid rgba(255, 196, 77, 0.6);
+  color: #ffd27a;
+  background: rgba(255, 196, 77, 0.1);
+}
+
+.evidence strong { font-weight: 800; }
+.evidence-confirmed strong { color: #71f0ba; }
+.evidence-provisional strong { color: #ffd27a; }
+.evidence-ambiguous strong { color: #ffaaa7; }
+.evidence-unknown strong { color: #c7cee2; }
+.evidence-none strong { color: #8d95b3; }
+.evidence-stale strong { color: #8d95b3; text-decoration: line-through; }

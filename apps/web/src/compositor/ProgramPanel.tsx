@@ -1,9 +1,13 @@
 import {
   CAMERA_IDS,
   type CameraId,
+  type ControlServerMessage,
+  type ControlSnapshot,
+  type OperatorMode,
   type ProgramSource,
   type ReceiverReadiness,
   type RenderAck,
+  type RenderCommand,
   SLATE,
 } from "@cue/contracts";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -18,11 +22,26 @@ import {
   type RecordingMeta,
   type RecordingStore,
 } from "../recording/recordingStore";
+import {
+  ControlSocketClient,
+  requestControlSession,
+  setControlMode,
+  takeCamera,
+} from "../producer/controlClient";
 import { drawSlate, drawVideoFrame, isThrottled, PROGRAM_HEIGHT, PROGRAM_WIDTH } from "./canvasRenderer";
+import {
+  ackToAcknowledgement,
+  backendClockOffsetMs,
+  commandToDecision,
+  idempotencyKey,
+  reconciliationFor,
+} from "./controlAdapter";
 import {
   acceptSuggestion,
   confirmDraw,
   createSwitcher,
+  evaluateDecision,
+  expirePendingAck,
   isLive,
   operatorHold,
   operatorResume,
@@ -32,13 +51,18 @@ import {
   runHealthCheck,
   type Step,
   type SwitcherState,
+  syncControlState,
 } from "./switcher";
 
 export interface ProgramPanelProps {
   eventId: string;
   rendererId: string;
   rendererGeneration: number;
+  /** LiveKit media link is up. */
   connected: boolean;
+  apiBaseUrl: string;
+  /** Empty string keeps the control link off; the compositor then runs in local manual mode. */
+  producerSecret: string;
   readiness: ReceiverReadiness | null;
   getSourceElement: (cameraId: CameraId) => HTMLVideoElement | null;
   getMasterAudioTrack: () => MediaStreamTrack | null;
@@ -50,6 +74,15 @@ export interface ProgramPanelProps {
 const DRAW_INTERVAL_MS = 33;
 const HEALTH_INTERVAL_MS = 250;
 const KEY_FOR_CAMERA: Record<CameraId, string> = { "CAM-HOST": "1", "CAM-GUEST": "2", "CAM-WIDE": "3" };
+const MODE_HINT: Record<OperatorMode, string> = {
+  SETUP: "no automatic cuts",
+  READY: "preflight passed",
+  ASSIST: "policy suggests, you press TAKE",
+  AUTO: "policy executes validated decisions; HOLD to stop it",
+  MANUAL_HOLD: "you own the shot; policy is ignored; health failover stays on",
+  DEGRADED: "some capability is unavailable",
+  ENDED: "event ended",
+};
 
 function isTypingTarget(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
@@ -63,11 +96,24 @@ function isTypingTarget(target: EventTarget | null): boolean {
  * source decoding, keeps A's audio fixed on the output, acknowledges a cut only
  * after the first drawn frame, and records the output to persisted chunks.
  */
+type LinkStatus = "off" | "connecting" | "connected" | "reconnecting" | "error";
+
+interface LinkState {
+  status: LinkStatus;
+  snapshot: ControlSnapshot | null;
+  lastError: string | null;
+  lastErrorAtMs: number | null;
+}
+
+const LINK_ERROR_TTL_MS = 8000;
+
 export function ProgramPanel({
   eventId,
   rendererId,
   rendererGeneration,
   connected,
+  apiBaseUrl,
+  producerSecret,
   readiness,
   getSourceElement,
   getMasterAudioTrack,
@@ -85,6 +131,8 @@ export function ProgramPanel({
   const [interrupted, setInterrupted] = useState<RecordingMeta[]>([]);
   const [chosenMimeType, setChosenMimeType] = useState<string | null>(null);
   const [noFrameSince, setNoFrameSince] = useState<number | null>(null);
+  const [link, setLink] = useState<LinkState>({ status: "off", snapshot: null, lastError: null, lastErrorAtMs: null });
+  const [linkEpoch, setLinkEpoch] = useState(0);
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const switcherRef = useRef(switcher);
@@ -100,15 +148,107 @@ export function ProgramPanel({
   const lastSourceRef = useRef<ProgramSource | null>(null);
   const lastStatsAtRef = useRef(0);
   const refreshAudioRef = useRef<() => void>(() => {});
+  const clientRef = useRef<ControlSocketClient | null>(null);
+  const linkConnectedRef = useRef(false);
+  const seenDecisionIdsRef = useRef(new Set<string>());
+  const nonceRef = useRef(0);
+
+  const noteLinkError = useCallback((message: string) => {
+    setLink((previous) => ({ ...previous, lastError: message, lastErrorAtMs: performance.now() }));
+  }, []);
+
+  const sendToBackend = useCallback(
+    (action: (client: ControlSocketClient) => void, label: string) => {
+      const client = clientRef.current;
+      if (!client || !linkConnectedRef.current) return false;
+      try {
+        action(client);
+        return true;
+      } catch (error) {
+        noteLinkError(`${label} not sent: ${error instanceof Error ? error.message : String(error)}`);
+        return false;
+      }
+    },
+    [noteLinkError],
+  );
 
   const applyStep = useCallback(
     (step: Step) => {
       switcherRef.current = step.state;
       setSwitcher(step.state);
       for (const line of step.log) onLog(line);
-      if (step.ack) onAck(step.ack);
+      const ack = step.ack;
+      if (!ack) return;
+      onAck(ack);
+      const offset = backendClockOffsetMs(performance.now(), Date.now());
+      if (ack.issuerDecisionId !== null) {
+        const acknowledgement = ackToAcknowledgement(ack, offset);
+        if (acknowledgement) {
+          sendToBackend((client) => client.acknowledge(acknowledgement), `ACK ${ack.issuerDecisionId}`);
+        }
+      } else if (ack.outcome === "APPLIED") {
+        // A local cut (slate, failover, revert) is reported as the compositor's actual state.
+        const program = step.state.program;
+        sendToBackend(
+          (client) => client.reconcile(reconciliationFor(program, step.state.controlGeneration, Date.now())),
+          "reconcile",
+        );
+      }
     },
-    [onAck, onLog],
+    [onAck, onLog, sendToBackend],
+  );
+
+  const handleCommand = useCallback(
+    (command: RenderCommand) => {
+      if (seenDecisionIdsRef.current.has(command.decisionId)) return;
+      seenDecisionIdsRef.current.add(command.decisionId);
+      const now = performance.now();
+      const withClock: SwitcherState = {
+        ...switcherRef.current,
+        backendClockOffsetMs: backendClockOffsetMs(now, Date.now()),
+      };
+      const step = evaluateDecision(withClock, commandToDecision(command), readinessRef.current, now);
+      applyStep(step);
+    },
+    [applyStep],
+  );
+
+  const handleServerMessage = useCallback(
+    (message: ControlServerMessage) => {
+      switch (message.type) {
+        case "control.authenticated":
+          onLog(`Control link authenticated as ${message.role}`);
+          break;
+        case "control.state": {
+          setLink((previous) => ({ ...previous, snapshot: message.state }));
+          const step = syncControlState(
+            switcherRef.current,
+            {
+              controlGeneration: message.state.controlGeneration,
+              mode: message.state.mode,
+              modeRevision: message.state.modeRevision,
+            },
+            performance.now(),
+          );
+          if (step.state !== switcherRef.current) applyStep(step);
+          break;
+        }
+        case "render.command":
+          handleCommand(message.command);
+          break;
+        case "control.error":
+          noteLinkError(`${message.code}${message.message ? `: ${message.message}` : ""}`);
+          onLog(`Control link error ${message.code}${message.message ? `: ${message.message}` : ""}`);
+          if (message.code === "INVALID_SESSION" || message.code === "SESSION_EXPIRED" || message.code === "AUTH_REQUIRED") {
+            setLinkEpoch((value) => value + 1);
+          }
+          break;
+        case "control.pong":
+        case "receiver.readiness":
+          break;
+      }
+    },
+    [applyStep, handleCommand, noteLinkError, onLog],
   );
 
   // Event or renderer generation changed: never resume AUTO, forget pending work.
@@ -135,6 +275,78 @@ export function ProgramPanel({
       onProgramChange(switcher.program.source);
     }
   }, [switcher.program.source, onProgramChange]);
+
+  // Control link to A's backend: session token, authenticated socket, bounded reconnect.
+  useEffect(() => {
+    const secret = producerSecret.trim();
+    if (!secret || !connected || rendererGeneration < 1) {
+      clientRef.current?.stop();
+      clientRef.current = null;
+      linkConnectedRef.current = false;
+      setLink({ status: "off", snapshot: null, lastError: null, lastErrorAtMs: null });
+      return;
+    }
+    let cancelled = false;
+    setLink((previous) => ({ ...previous, status: "connecting" }));
+    (async () => {
+      try {
+        const session = await requestControlSession(apiBaseUrl, secret, eventId, "DIRECTOR");
+        if (cancelled) return;
+        const client = new ControlSocketClient({
+          apiBaseUrl,
+          eventId,
+          token: session.token,
+          onMessage: handleServerMessage,
+          onConnectionChange: (isConnected) => {
+            linkConnectedRef.current = isConnected;
+            setLink((previous) => ({
+              ...previous,
+              status: isConnected ? "connected" : previous.status === "off" ? "off" : "reconnecting",
+            }));
+            if (isConnected) {
+              const program = switcherRef.current.program;
+              sendToBackend(
+                (c) => c.reconcile(reconciliationFor(program, switcherRef.current.controlGeneration, Date.now())),
+                "reconcile on connect",
+              );
+              if (readinessRef.current) {
+                const readiness = readinessRef.current;
+                sendToBackend((c) => c.reportReadiness(readiness), "readiness");
+              }
+            }
+          },
+        });
+        clientRef.current = client;
+        client.start();
+        onLog(`Control session issued (${session.role}, ${session.expiresInSeconds} s); connecting socket`);
+      } catch (error) {
+        if (cancelled) return;
+        const message = error instanceof Error ? error.message : String(error);
+        setLink({ status: "error", snapshot: null, lastError: message, lastErrorAtMs: performance.now() });
+        onLog(`Control link failed: ${message}; compositor stays in local manual mode`);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      clientRef.current?.stop();
+      clientRef.current = null;
+      linkConnectedRef.current = false;
+    };
+  }, [apiBaseUrl, connected, eventId, handleServerMessage, linkEpoch, onLog, producerSecret, rendererGeneration, sendToBackend]);
+
+  // Readiness goes up on every tick while the link is connected.
+  useEffect(() => {
+    if (!readiness || !linkConnectedRef.current) return;
+    sendToBackend((client) => client.reportReadiness(readiness), "readiness");
+  }, [readiness, sendToBackend]);
+
+  // Keepalive.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (linkConnectedRef.current) sendToBackend((client) => client.ping(), "ping");
+    }, 15_000);
+    return () => window.clearInterval(id);
+  }, [sendToBackend]);
 
   // Persistence store and recorder.
   useEffect(() => {
@@ -230,26 +442,106 @@ export function ProgramPanel({
   // Health check on the readiness cadence. Failover runs in every mode.
   useEffect(() => {
     const id = window.setInterval(() => {
-      const step = runHealthCheck(switcherRef.current, readinessRef.current, performance.now());
+      const now = performance.now();
+      const expired = expirePendingAck(switcherRef.current, readinessRef.current, now);
+      if (expired.state !== switcherRef.current) applyStep(expired);
+      const step = runHealthCheck(switcherRef.current, readinessRef.current, now);
       if (step.state !== switcherRef.current) applyStep(step);
       refreshAudioRef.current();
     }, HEALTH_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [applyStep]);
 
+  /** Operator TAKE: through the backend when the control link is up, locally otherwise. */
+  const requestTake = useCallback(
+    (cameraId: CameraId) => {
+      const now = performance.now();
+      const state = switcherRef.current;
+      const slot = readinessRef.current?.slots.find((candidate) => candidate.cameraId === cameraId);
+      if (linkConnectedRef.current && slot?.streamEpoch) {
+        nonceRef.current += 1;
+        void takeCamera(
+          apiBaseUrl,
+          producerSecret.trim(),
+          eventId,
+          cameraId,
+          slot.streamEpoch,
+          state.modeRevision,
+          idempotencyKey("take", Date.now(), `${rendererId}-${nonceRef.current}`),
+        )
+          .then((result) => {
+            if (result.renderCommand) handleCommand(result.renderCommand);
+          })
+          .catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            noteLinkError(`TAKE ${cameraId} refused: ${message}`);
+            onLog(`Backend refused TAKE ${cameraId}: ${message}`);
+          });
+        return;
+      }
+      applyStep(operatorTake(state, cameraId, readinessRef.current, now));
+    },
+    [apiBaseUrl, applyStep, eventId, handleCommand, noteLinkError, onLog, producerSecret, rendererId],
+  );
+
+  /** Mode changes (HOLD, ASSIST, AUTO): through the backend when linked, locally otherwise. */
+  const requestMode = useCallback(
+    (mode: Extract<OperatorMode, "ASSIST" | "AUTO" | "MANUAL_HOLD">) => {
+      const now = performance.now();
+      const state = switcherRef.current;
+      if (linkConnectedRef.current) {
+        nonceRef.current += 1;
+        void setControlMode(
+          apiBaseUrl,
+          producerSecret.trim(),
+          eventId,
+          mode,
+          state.modeRevision,
+          idempotencyKey("mode", Date.now(), `${rendererId}-${nonceRef.current}`),
+        )
+          .then((result) => {
+            const step = syncControlState(
+              switcherRef.current,
+              {
+                controlGeneration: result.state.controlGeneration,
+                mode: result.state.mode,
+                modeRevision: result.state.modeRevision,
+              },
+              performance.now(),
+            );
+            if (step.state !== switcherRef.current) applyStep(step);
+            setLink((previous) => ({ ...previous, snapshot: result.state }));
+          })
+          .catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            noteLinkError(`Mode ${mode} refused: ${message}`);
+            onLog(`Backend refused mode ${mode}: ${message}`);
+          });
+        return;
+      }
+      if (mode === "MANUAL_HOLD") applyStep(operatorHold(state, now));
+      else applyStep(operatorResume(state, mode, now));
+    },
+    [apiBaseUrl, applyStep, eventId, noteLinkError, onLog, producerSecret, rendererId],
+  );
+
+  /** Emergency slate is always local: it must work with the backend gone. Reconciled afterwards. */
+  const requestSlate = useCallback(() => {
+    applyStep(operatorSlate(switcherRef.current, performance.now()));
+  }, [applyStep]);
+
   // Keyboard: 1/2/3 take, 0 slate, H hold toggle. Ignored while typing.
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (isTypingTarget(event.target) || event.metaKey || event.ctrlKey || event.altKey) return;
-      const now = performance.now();
       const state = switcherRef.current;
       if (event.key === "1" || event.key === "2" || event.key === "3") {
         const cameraId = CAMERA_IDS.find((id) => KEY_FOR_CAMERA[id] === event.key);
-        if (cameraId) applyStep(operatorTake(state, cameraId, readinessRef.current, now));
+        if (cameraId) requestTake(cameraId);
       } else if (event.key === "0") {
-        applyStep(operatorSlate(state, now));
+        requestSlate();
       } else if (event.key === "h" || event.key === "H") {
-        applyStep(state.mode === "MANUAL_HOLD" ? operatorResume(state, "ASSIST", now) : operatorHold(state, now));
+        requestMode(state.mode === "MANUAL_HOLD" ? "ASSIST" : "MANUAL_HOLD");
       } else {
         return;
       }
@@ -257,7 +549,7 @@ export function ProgramPanel({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [applyStep]);
+  }, [requestMode, requestSlate, requestTake]);
 
   /** Keep the recorder's audio track stable: route whatever master track exists into one destination node. */
   function refreshAudioSource() {
@@ -379,6 +671,19 @@ export function ProgramPanel({
   const recording = recorderStatus.phase === "recording" || recorderStatus.phase === "stopping";
   const slotFor = (cameraId: CameraId) => readiness?.slots.find((slot) => slot.cameraId === cameraId) ?? null;
 
+  const linkWanted = producerSecret.trim().length > 0;
+  const degradedReasons: string[] = [];
+  if (!connected) degradedReasons.push("media link down");
+  if (linkWanted && link.status !== "connected") degradedReasons.push(`control link ${link.status}: local manual mode`);
+  if (readiness && !readiness.masterAudio.attached) degradedReasons.push("no master audio");
+  if (readiness && readiness.slots.every((slot) => !slot.renderable)) degradedReasons.push("no renderable camera");
+  if (throttled) degradedReasons.push("draw loop throttled");
+  if (recorderStatus.phase === "error") degradedReasons.push("recording error");
+  if (recorderStatus.persistFailures > 0) degradedReasons.push("recording chunks not persisted");
+  const displayMode = degradedReasons.length > 0 ? "DEGRADED" : switcher.mode;
+  const lastFailed = switcher.acks.find((ack) => ack.outcome === "FAILED" && now - ack.atMs < 10_000) ?? null;
+  const recentLinkError = link.lastError && link.lastErrorAtMs !== null && now - link.lastErrorAtMs < LINK_ERROR_TTL_MS ? link.lastError : null;
+
   return (
     <section className="panel form-panel program-panel" aria-label="Programme">
       <div className="preview-heading">
@@ -393,6 +698,35 @@ export function ProgramPanel({
           </span>
         </div>
       </div>
+
+      <div className={`mode-strip mode-${displayMode.toLowerCase().replace("_", "-")}`}>
+        <div>
+          <span className="mode-label">{displayMode.replace("_", " ")}</span>
+          <span className="mode-sub">
+            {displayMode === "DEGRADED" ? `control mode ${switcher.mode} · ${degradedReasons.join(" · ")}` : MODE_HINT[switcher.mode]}
+          </span>
+        </div>
+        <div className="mode-sub">
+          {linkWanted
+            ? `control link ${link.status}${link.snapshot ? ` · backend ${link.snapshot.mode} rev ${link.snapshot.modeRevision} · live ${link.snapshot.liveCameraId ?? "slate"}` : ""}`
+            : "control link off: enter the producer secret to hand authority to the backend"}
+        </div>
+      </div>
+
+      {lastFailed && (
+        <p className="banner banner-error">
+          Switch to {lastFailed.renderedSource} failed: no frame drawn within 1 s. Reverted. The tally never went live for it.
+        </p>
+      )}
+      {recentLinkError && <p className="banner banner-warn">Backend: {recentLinkError}</p>}
+      {(recorderStatus.phase === "error" || recorderStatus.persistFailures > 0) && (
+        <p className="banner banner-error">
+          Recording problem: {recorderStatus.lastError ?? `${recorderStatus.persistFailures} chunks not persisted`}. Live output continues.
+        </p>
+      )}
+      {recording && !recorderStatus.hasAudio && (
+        <p className="banner banner-warn">Recording has no audio: the master microphone was not attached when it started.</p>
+      )}
 
       <div className="program-out">
         <canvas ref={canvasRef} width={PROGRAM_WIDTH} height={PROGRAM_HEIGHT} aria-label="Programme output" />
@@ -411,7 +745,7 @@ export function ProgramPanel({
               type="button"
               className={`take ${onAir ? "take-on-air" : ""}`}
               disabled={!slot?.renderable || !connected}
-              onClick={() => applyStep(operatorTake(switcherRef.current, cameraId, readinessRef.current, performance.now()))}
+              onClick={() => requestTake(cameraId)}
               title={slot?.renderable ? "TAKE" : "Not renderable"}
             >
               <span className="key-hint">{KEY_FOR_CAMERA[cameraId]}</span>
@@ -424,7 +758,7 @@ export function ProgramPanel({
           type="button"
           className="take take-slate"
           disabled={program.source === SLATE}
-          onClick={() => applyStep(operatorSlate(switcherRef.current, performance.now()))}
+          onClick={requestSlate}
         >
           <span className="key-hint">0</span>
           SLATE
@@ -436,13 +770,7 @@ export function ProgramPanel({
         <button
           type="button"
           className={switcher.mode === "MANUAL_HOLD" ? "danger" : "primary"}
-          onClick={() =>
-            applyStep(
-              switcher.mode === "MANUAL_HOLD"
-                ? operatorResume(switcherRef.current, "ASSIST", performance.now())
-                : operatorHold(switcherRef.current, performance.now()),
-            )
-          }
+          onClick={() => requestMode(switcher.mode === "MANUAL_HOLD" ? "ASSIST" : "MANUAL_HOLD")}
         >
           <span className="key-hint">H</span>
           {switcher.mode === "MANUAL_HOLD" ? "HOLDING · release to ASSIST" : "HOLD"}
@@ -450,14 +778,14 @@ export function ProgramPanel({
         <button
           type="button"
           disabled={switcher.mode === "AUTO"}
-          onClick={() => applyStep(operatorResume(switcherRef.current, "AUTO", performance.now()))}
+          onClick={() => requestMode("AUTO")}
         >
           Enable AUTO
         </button>
         <button
           type="button"
           disabled={switcher.mode === "ASSIST"}
-          onClick={() => applyStep(operatorResume(switcherRef.current, "ASSIST", performance.now()))}
+          onClick={() => requestMode("ASSIST")}
         >
           Back to ASSIST
         </button>
