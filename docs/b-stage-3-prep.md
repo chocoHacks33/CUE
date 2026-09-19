@@ -160,8 +160,9 @@ Still **NOT RUN**, unchanged:
 2. **Real faces**, enrolled and matched from real cameras. Note from Stage 2:
    drawn faces cannot substitute, because SFace collapses them together.
 3. **The identity report** — `docs/results/b-identity-report.template.md`. The
-   harness now computes every number that page asks for; somebody still has to
-   run the trials.
+   harness computes every number that page asks for, and
+   [b-stage-3.md](b-stage-3.md) adds `cue-guests trials` to produce its input;
+   somebody still has to run the trials.
 4. **B's media checks** — `docs/results/b-media-check.template.md`.
 
 Earlier stages: [b-stage-0.md](b-stage-0.md),

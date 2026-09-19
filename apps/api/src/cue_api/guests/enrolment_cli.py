@@ -226,6 +226,110 @@ def _evaluate_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _calibrate_command(args: argparse.Namespace) -> int:
+    """Fit a MEASURED calibration from labelled pairs and write it to disk.
+
+    Refuses a one-sided sample, the same way the fitter does, so nothing on disk
+    can claim a measurement that the pairs do not support.
+    """
+    from cue_api.guests.calibration_store import CalibrationFileError, save
+    from cue_api.guests.confidence_calibration import Calibration
+
+    document = json.loads(Path(args.pairs).read_text("utf-8"))
+    labelled = [
+        (float(row["similarity"]), bool(row["samePerson"])) for row in document.get("pairs", [])
+    ]
+    if not labelled:
+        print("error: no labelled pairs in the file", file=sys.stderr)
+        return 1
+
+    try:
+        calibration = Calibration.fit(labelled, calibration_id=args.calibration_id)
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+
+    try:
+        stored = save(calibration, Path(args.out), dataset_note=args.dataset_note)
+    except CalibrationFileError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+
+    positives = sum(1 for _, same in labelled if same)
+    print(f"fitted:       {stored.calibration.calibration_id}")
+    print(f"status:       {stored.calibration.status.value}")
+    print(f"samples:      {stored.calibration.sample_count} "
+          f"({positives} positive / {len(labelled) - positives} negative)")
+    print(f"written to:   {args.out}")
+    print(f"dataset:      {stored.dataset_note}")
+    return 0
+
+
+def _trials_command(args: argparse.Namespace) -> int:
+    """Score labelled capture files into the document `evaluate` reads.
+
+    Filenames carry the labels: a positive is passed as guestId=path, a negative
+    as a bare path. Nothing here infers who is in a photograph.
+    """
+    import cv2  # noqa: PLC0415 - scoring real captures needs OpenCV
+
+    from cue_api.guests.adapters.opencv_models import SFaceEmbedder, YuNetDetector
+    from cue_api.guests.backend_client import GuestBackendClient
+    from cue_api.guests.trial_runner import Capture, run_captures
+    from cue_api.guests.types import DecodedFrame
+
+    model_dir = Path(args.model_dir)
+    detector = YuNetDetector(model_dir=model_dir)
+    embedder = SFaceEmbedder(model_dir=model_dir)
+    gallery = GuestBackendClient(args.api, args.secret).fetch_gallery(args.event)
+
+    captures: list[Capture] = []
+    for entry in args.positive:
+        guest_id, _, image_path = entry.partition("=")
+        if not guest_id or not image_path:
+            print(f"error: --positive expects guestId=path, received {entry!r}", file=sys.stderr)
+            return 1
+        captures.append(_load_capture(cv2, DecodedFrame, Capture, image_path, guest_id))
+    for image_path in args.negative:
+        captures.append(_load_capture(cv2, DecodedFrame, Capture, image_path, None))
+
+    if not captures:
+        print("error: no captures given", file=sys.stderr)
+        return 1
+
+    results = run_captures(captures, gallery, detector, embedder)
+    document = json.dumps(results.to_document(), indent=2) + chr(10)
+    Path(args.out).write_text(document, "utf-8")
+
+    print(f"positives:    {len(results.positives)}")
+    print(f"negatives:    {len(results.negatives)}")
+    print(f"pairs:        {len(results.pairs)}")
+    print(f"skipped:      {len(results.skipped)}")
+    for skip in results.skipped:
+        print(f"              {skip.label}: {skip.reason}")
+    print(f"written to:   {args.out}")
+    print()
+    print(f"next: cue-guests evaluate --trials {args.out}")
+    return 0
+
+
+def _load_capture(cv2, decoded_frame, capture_type, image_path: str, guest_id: str | None):
+    image = cv2.imread(image_path)
+    if image is None:
+        raise SystemExit(f"error: cannot read {image_path}")
+    height, width = image.shape[:2]
+    frame = decoded_frame(
+        camera_id="CAM-GUEST",
+        stream_epoch=1,
+        sequence=0,
+        width=width,
+        height=height,
+        received_at_ms=int(time.time() * 1000),
+        image=image,
+    )
+    return capture_type(label=Path(image_path).name, frame=frame, guest_id=guest_id)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cue-guests", description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -268,6 +372,33 @@ def build_parser() -> argparse.ArgumentParser:
         help="JSON with positives/negatives, and optional labelled similarity pairs",
     )
     evaluate.set_defaults(handler=_evaluate_command)
+
+    calibrate = subparsers.add_parser(
+        "calibrate", help="fit a MEASURED calibration from labelled pairs"
+    )
+    calibrate.add_argument("--pairs", required=True, help="JSON with labelled similarity pairs")
+    calibrate.add_argument("--out", default="calibration.json")
+    calibrate.add_argument("--calibration-id", required=True)
+    calibrate.add_argument(
+        "--dataset-note", required=True, help="where the held-out pairs came from"
+    )
+    calibrate.set_defaults(handler=_calibrate_command)
+
+    trials = subparsers.add_parser(
+        "trials", help="score labelled capture files into a trials document"
+    )
+    add_backend_arguments(trials)
+    trials.add_argument("--model-dir", default=str(DEFAULT_MODEL_DIR))
+    trials.add_argument(
+        "--positive", action="append", default=[], metavar="GUEST_ID=PATH",
+        help="a capture of an enrolled guest; repeatable",
+    )
+    trials.add_argument(
+        "--negative", action="append", default=[], metavar="PATH",
+        help="a capture of someone who never enrolled; repeatable",
+    )
+    trials.add_argument("--out", default="trials.json")
+    trials.set_defaults(handler=_trials_command)
 
     return parser
 
