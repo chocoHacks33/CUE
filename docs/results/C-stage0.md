@@ -16,6 +16,37 @@ _Owner: role C (speech, context, policy). Branch `person-c-stage-0`, branched fr
 
 **Provider policy (updated).** OpenAI stays the production runtime and the default: `CUE_PROVIDER=openai` in `.env.example`, `parse()` targets the OpenAI SDK, and release-gate measurements are always on the pinned OpenAI model. Ollama is a **dev-only fallback** used when the OpenAI key is temporarily unavailable to a teammate (the shared key currently lives on A's machine); it is not a supported production interpreter and it does not participate in the release gate. Any Ollama-branching code lives outside the release path — see `scripts/smoke_api.py` on the `person-c-booth-demo` branch for the dev-only reachability check.
 
+## Local model findings: CPU only, not viable for production
+
+Booth-demo latency exploration on this laptop. **Recorded here so we do not re-run these experiments; the conclusion is to park the local-model path.** Production continues to target OpenAI.
+
+**Hardware context.** `ollama ps` shows 100% CPU across every model I ran; the laptop has no GPU acceleration available to Ollama. That is the ceiling every number below sits under.
+
+| model | processor | context | resident size |
+|---|---|---|---|
+| llama3.2:3b   | 100% CPU | 4096 | 2.6 GB |
+| llama3.2:1b   | 100% CPU | 4096 | 1.5 GB |
+| qwen2.5:1.5b  | 100% CPU | 4096 | 1.2 GB |
+
+**Sequential-parse benchmark, `scripts/bench_ollama.py --model llama3.2:3b --n 10`** (warm; first-call excluded from steady-state):
+
+| mode | first-call | steady p50 | steady p95 | mean tokens/call |
+|---|---:|---:|---:|---:|
+| full-schema Cue    | 19 930 ms | 5 890 ms | 6 149 ms | 58 |
+| fast-schema (this branch) |  8 395 ms | 4 243 ms | 4 697 ms | 30 |
+
+Fast mode halves output tokens and cuts steady p50 by ~28% on the 3B model, but the CPU floor still dominates.
+
+**Dev-set (46 cases) in fast mode, `scripts/run_semantic.py --set dev`:**
+
+| model | pass rate | wrong SHOW cuts | p50 (ms) | p95 (ms) |
+|---|---:|---:|---:|---:|
+| qwen2.5:1.5b | 80.4 % | 4 | 3 582 | 3 911 |
+| llama3.2:3b  | 76.1 % | 6 | 4 323 | 4 670 |
+| llama3.2:1b  | 65.2 % | **0** | 3 988 | 4 977 |
+
+**Conclusion.** Booth target was p50 < 1.5 s with zero wrong cuts and 80%+ pass. **No local model on this laptop clears both bars simultaneously**, and the fastest p50 is still ~2.4× the target. The bottleneck is CPU-only, JSON-schema-constrained decoding of the tokens themselves; smaller models and fast-mode schema shrinkage do not close the gap enough. Decision: **park the local Ollama path**, do not pursue further optimisation there (including plain-text output), and ship the release path on OpenAI as originally planned. All Ollama-branching code stays on `person-c-booth-demo` and is not merged into the release path.
+
 ## Run commands (from `apps/api`'s venv)
 
 A's onboarding sequence still works verbatim:
