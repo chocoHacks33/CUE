@@ -1,0 +1,18 @@
+{
+  "name": "cue",
+  "private": true,
+  "version": "0.0.1",
+  "workspaces": [
+    "apps/web",
+    "packages/contracts"
+  ],
+  "scripts": {
+    "dev:web": "npm --workspace @cue/web run dev",
+    "build": "npm --workspace @cue/contracts run build && npm --workspace @cue/web run build",
+    "test": "npm --workspace @cue/contracts run test && npm --workspace @cue/web run test",
+    "typecheck": "npm --workspace @cue/contracts run typecheck && npm --workspace @cue/web run typecheck"
+  },
+  "engines": {
+    "node": "^20.0.0 || ^22.0.0 || >=24.0.0"
+  }
+}

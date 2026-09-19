@@ -1,0 +1,262 @@
+:root {
+  color: #f5f7ff;
+  background: #070a12;
+  font-family:
+    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 15% 0%, rgba(98, 88, 255, 0.2), transparent 32rem),
+    radial-gradient(circle at 90% 20%, rgba(0, 214, 170, 0.12), transparent 28rem),
+    #070a12;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.shell {
+  width: min(1180px, calc(100% - 32px));
+  margin: 0 auto;
+  padding: 56px 0 32px;
+}
+
+.hero {
+  max-width: 760px;
+  margin-bottom: 28px;
+}
+
+.hero h1 {
+  margin: 4px 0 10px;
+  font-size: clamp(2.2rem, 5vw, 4.3rem);
+  letter-spacing: -0.055em;
+  line-height: 0.98;
+}
+
+.hero p,
+footer {
+  color: #aeb6ce;
+}
+
+.eyebrow {
+  margin: 0;
+  color: #8d83ff;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.15em;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.8fr) minmax(400px, 1.4fr);
+  gap: 18px;
+}
+
+.panel {
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 22px;
+  background: rgba(16, 21, 37, 0.82);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.28);
+  backdrop-filter: blur(16px);
+}
+
+.form-panel {
+  display: grid;
+  align-content: start;
+  gap: 15px;
+  padding: 24px;
+}
+
+h2 {
+  margin: 0;
+}
+
+label {
+  display: grid;
+  gap: 7px;
+  color: #cbd2e7;
+  font-size: 0.82rem;
+  font-weight: 700;
+}
+
+input,
+select {
+  width: 100%;
+  border: 1px solid #303955;
+  border-radius: 11px;
+  padding: 11px 12px;
+  color: #f7f8ff;
+  background: #0a0f1d;
+  outline: none;
+}
+
+input:focus,
+select:focus {
+  border-color: #8d83ff;
+  box-shadow: 0 0 0 3px rgba(141, 131, 255, 0.13);
+}
+
+.contract-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 4px 12px;
+  border-radius: 13px;
+  padding: 14px;
+  background: rgba(141, 131, 255, 0.1);
+}
+
+.contract-card strong {
+  grid-row: span 2;
+  align-self: center;
+  color: #a9ffea;
+}
+
+.contract-card span {
+  color: #bfc6d9;
+  font-size: 0.8rem;
+}
+
+.actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+button {
+  border: 1px solid #39415b;
+  border-radius: 11px;
+  padding: 11px 14px;
+  color: #f4f6ff;
+  background: #161d30;
+  cursor: pointer;
+  font-weight: 750;
+}
+
+button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: #667093;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+button.primary {
+  border-color: transparent;
+  color: #070a12;
+  background: linear-gradient(135deg, #a49cff, #55eac6);
+}
+
+button.danger {
+  color: #ffaaa7;
+}
+
+.preview-panel {
+  padding: 24px;
+}
+
+.preview-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.status {
+  border: 1px solid #3b445f;
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: #c7cee2;
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.status-published {
+  border-color: rgba(56, 224, 158, 0.45);
+  color: #71f0ba;
+  background: rgba(56, 224, 158, 0.09);
+}
+
+.status-error {
+  border-color: rgba(255, 93, 88, 0.45);
+  color: #ffaaa7;
+}
+
+.video-frame {
+  position: relative;
+  display: grid;
+  min-height: 390px;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #28314b;
+  border-radius: 16px;
+  color: #68718a;
+  background: #02040a;
+}
+
+.video-frame video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  transform: scaleX(-1);
+}
+
+.detail {
+  min-height: 44px;
+  color: #b9c0d4;
+}
+
+.connection-details {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 6px 12px;
+  margin: 0;
+  padding: 13px;
+  border-radius: 12px;
+  background: #0a0f1d;
+  font-size: 0.78rem;
+}
+
+.connection-details dt {
+  color: #7f89a4;
+}
+
+.connection-details dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+footer {
+  padding: 22px 4px 0;
+  font-size: 0.8rem;
+}
+
+@media (max-width: 850px) {
+  .shell {
+    padding-top: 32px;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .video-frame {
+    min-height: 280px;
+  }
+}
