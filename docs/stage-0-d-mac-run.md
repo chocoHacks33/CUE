@@ -98,6 +98,13 @@ Maps one to one onto A's verification list.
 
 Then run the **Recording test** with `CAM-HOST + master audio`: Start, wait 30 to 60 s while A speaks a marker and waves, Stop, play inline, Download, and play the file in QuickTime or VLC. Record the real container (expected `video/webm;codecs=vp8,opus`), duration and outcome in the results file.
 
+## Stage 3: control link, evidence and modes
+
+- Enter the **producer secret** in the session panel (it is also what the pairing panel uses). With the LiveKit link up, the compositor connects to A's control socket as DIRECTOR. The mode strip shows the link state and the backend's mode, revision and live camera.
+- While linked, TAKE and HOLD go through the backend and the compositor applies the returned command. SLATE is always local. If the link drops, the strip says DEGRADED and every control works locally.
+- Each tile shows a "Who" line from B's observations: a name only for a confirmed consenting guest, with age and whether a named take is allowed. It reads "evidence off" until connected, and "unavailable" if B's routes are down.
+- A switch that draws no frame within 1 s is acknowledged FAILED and reverted; a red banner says so.
+
 ## Stage 2 controls (compositor)
 
 On the producer page, top of the right column. Keys work only when no input has focus.

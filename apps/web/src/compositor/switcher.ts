@@ -2,6 +2,7 @@ import {
   type CameraId,
   type DecisionOrigin,
   type DecisionReason,
+  LOCAL_GENERATION,
   type OperatorMode,
   type ProgramSource,
   type ReceiverReadiness,
@@ -28,6 +29,8 @@ export const FAILOVER_AFTER_MS = 1500;
 export const RECOVER_AFTER_MS = 2000;
 /** How long a locally issued decision stays valid before the renderer refuses it. */
 export const LOCAL_DECISION_TTL_MS = 5000;
+/** A switch that has not drawn a frame after this long is acknowledged FAILED and reverted. */
+export const ACK_TIMEOUT_MS = 1000;
 /** Producer-approved order for a safety cut. The wide view is the safety shot. */
 export const DEFAULT_SAFE_ORDER: readonly CameraId[] = ["CAM-WIDE", "CAM-HOST", "CAM-GUEST"];
 const MAX_ACKS = 100;
@@ -49,15 +52,17 @@ export interface SwitcherState {
   eventId: string;
   rendererId: string;
   rendererGeneration: number;
-  /** Backend control generation. 0 means no backend; local decisions always use 0. */
-  controlGeneration: number;
+  /** Backend control generation from the control snapshot; LOCAL_GENERATION until one arrives. Local decisions always use LOCAL_GENERATION. */
+  controlGeneration: string;
   /** Null until the backend supplies a mapping; backend-clock decisions are rejected meanwhile. */
   backendClockOffsetMs: number | null;
   mode: OperatorMode;
   modeRevision: number;
   program: ProgramState;
+  /** What was on air before the current programme, for a revert after a failed switch. */
+  previousProgram: ProgramState | null;
   safeOrder: readonly CameraId[];
-  lastSequenceByGeneration: Readonly<Record<number, number>>;
+  lastSequenceByGeneration: Readonly<Record<string, number>>;
   nextLocalSequence: number;
   /** A policy decision received in ASSIST mode, waiting for the operator. */
   suggestion: ShotDecision | null;
@@ -88,7 +93,7 @@ export function createSwitcher(init: {
     eventId: init.eventId,
     rendererId: init.rendererId,
     rendererGeneration: init.rendererGeneration,
-    controlGeneration: 0,
+    controlGeneration: LOCAL_GENERATION,
     backendClockOffsetMs: null,
     mode: "ASSIST",
     modeRevision: 1,
@@ -102,6 +107,7 @@ export function createSwitcher(init: {
       decisionSequence: null,
       confirmedAtMs: null,
     },
+    previousProgram: null,
     safeOrder: init.safeOrder ?? DEFAULT_SAFE_ORDER,
     lastSequenceByGeneration: {},
     nextLocalSequence: 1,
@@ -138,6 +144,7 @@ function makeAck(
     eventId: state.eventId,
     decisionSequence: decision.sequence,
     controlGeneration: decision.controlGeneration,
+    issuerDecisionId: decision.issuerDecisionId,
     rendererId: state.rendererId,
     rendererGeneration: state.rendererGeneration,
     outcome,
@@ -161,12 +168,16 @@ function localDecision(
   evidence: string | null = null,
 ): { state: SwitcherState; decision: ShotDecision } {
   // Never reuse a sequence the renderer has already consumed for generation 0.
-  const sequence = Math.max(state.nextLocalSequence, (state.lastSequenceByGeneration[0] ?? 0) + 1);
+  const sequence = Math.max(
+    state.nextLocalSequence,
+    (state.lastSequenceByGeneration[LOCAL_GENERATION] ?? 0) + 1,
+  );
   const decision: ShotDecision = {
     contractVersion: SWITCHING_CONTRACT_VERSION,
     eventId: state.eventId,
     sequence,
-    controlGeneration: 0,
+    controlGeneration: LOCAL_GENERATION,
+    issuerDecisionId: null,
     modeRevision: state.modeRevision,
     origin,
     target,
@@ -219,7 +230,10 @@ export function evaluateDecision(
 
   if (decision.eventId !== state.eventId) return reject("WRONG_EVENT", false);
   if (state.mode === "ENDED") return reject("EVENT_ENDED");
-  if (decision.controlGeneration !== 0 && decision.controlGeneration !== state.controlGeneration) {
+  if (
+    decision.controlGeneration !== LOCAL_GENERATION &&
+    decision.controlGeneration !== state.controlGeneration
+  ) {
     return reject("STALE_CONTROL_GENERATION", false);
   }
   const lastSequence = state.lastSequenceByGeneration[decision.controlGeneration] ?? 0;
@@ -291,6 +305,7 @@ export function evaluateDecision(
     state: {
       ...state,
       program,
+      previousProgram: state.program,
       pendingAck: makeAck(state, decision, "APPLIED", null, now, program),
       suggestion: null,
       programUnhealthySinceMs: null,
@@ -411,6 +426,87 @@ export function resetForGeneration(state: SwitcherState, rendererGeneration: num
     programUnhealthySinceMs: null,
     renderableSince: {},
   };
+}
+
+/**
+ * The backend's control snapshot is authoritative while the control link is up:
+ * adopt its generation, mode and revision. A generation change drops pending work.
+ */
+export function syncControlState(
+  state: SwitcherState,
+  snapshot: { controlGeneration: string; mode: OperatorMode; modeRevision: number },
+  now: number,
+): Step {
+  const generationChanged = snapshot.controlGeneration !== state.controlGeneration;
+  const changed =
+    generationChanged ||
+    snapshot.mode !== state.mode ||
+    snapshot.modeRevision !== state.modeRevision;
+  if (!changed) return { state, ack: null, log: [] };
+
+  const log: string[] = [];
+  let acks = state.acks;
+  let pendingAck = state.pendingAck;
+  if (generationChanged) {
+    log.push(`Backend control generation ${snapshot.controlGeneration} (was ${state.controlGeneration}); pending work dropped`);
+    if (pendingAck) {
+      acks = pushAck(acks, { ...pendingAck, outcome: "REJECTED", rejectReason: "STALE_CONTROL_GENERATION", atMs: now });
+      pendingAck = null;
+    }
+  }
+  if (snapshot.mode !== state.mode) log.push(`Backend mode ${snapshot.mode} (revision ${snapshot.modeRevision})`);
+  return {
+    state: {
+      ...state,
+      controlGeneration: snapshot.controlGeneration,
+      mode: snapshot.mode,
+      modeRevision: snapshot.modeRevision,
+      suggestion: generationChanged ? null : state.suggestion,
+      pendingAck,
+      acks,
+    },
+    ack: null,
+    log,
+  };
+}
+
+/**
+ * A switch that never drew a frame is a failed render, not a live cut. Acknowledge
+ * it FAILED and go back to what was on air, or to a safe source, or to the slate.
+ */
+export function expirePendingAck(
+  state: SwitcherState,
+  readiness: ReceiverReadiness | null,
+  now: number,
+  timeoutMs = ACK_TIMEOUT_MS,
+): Step {
+  const pending = state.pendingAck;
+  if (!pending || now - state.program.sinceMs < timeoutMs) return { state, ack: null, log: [] };
+
+  const failed: RenderAck = { ...pending, outcome: "FAILED", rejectReason: "ACK_TIMEOUT", atMs: now };
+  const log = [`FAILED #${pending.controlGeneration}.${pending.decisionSequence}: ${pending.renderedSource} drew no frame within ${timeoutMs} ms`];
+  let next: SwitcherState = { ...state, pendingAck: null, acks: pushAck(state.acks, failed) };
+
+  const previous = next.previousProgram;
+  let target: ProgramSource = SLATE;
+  let epoch: number | null = null;
+  if (previous && previous.source !== SLATE) {
+    const slot = slotFor(readiness, previous.source);
+    if (slot?.renderable) {
+      target = previous.source;
+      epoch = slot.streamEpoch;
+    }
+  }
+  if (target === SLATE && readiness) {
+    const candidate = safeCandidate(next, readiness, now, next.program.source);
+    if (candidate) {
+      target = candidate.cameraId;
+      epoch = candidate.streamEpoch;
+    }
+  }
+  const issued = localDecision(next, "SAFETY", target, epoch, "ACK_TIMEOUT_REVERT", now, `reverting after failed switch to ${pending.renderedSource}`);
+  const step = evaluateDecision(issued.state, issued.decision, readiness, now);
+  return { state: step.state, ack: failed, log: [...log, ...step.log] };
 }
 
 function safeCandidate(

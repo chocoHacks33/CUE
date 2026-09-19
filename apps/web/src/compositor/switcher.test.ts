@@ -10,9 +10,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   acceptSuggestion,
+  ACK_TIMEOUT_MS,
   confirmDraw,
   createSwitcher,
   evaluateDecision,
+  expirePendingAck,
   FAILOVER_AFTER_MS,
   isLive,
   MIN_SHOT_MS,
@@ -24,6 +26,7 @@ import {
   resetForGeneration,
   runHealthCheck,
   type SwitcherState,
+  syncControlState,
 } from "./switcher";
 
 const EVENT = "hackmit-demo";
@@ -86,6 +89,7 @@ function policyDecision(
     eventId: EVENT,
     sequence: policySequence,
     controlGeneration: state.controlGeneration,
+    issuerDecisionId: null,
     modeRevision: state.modeRevision,
     origin: "POLICY",
     target,
@@ -233,7 +237,7 @@ describe("policy decisions", () => {
     const replay = evaluateDecision(applied.state, ok, allHealthy, 5001);
     expect(replay.ack?.rejectReason).toBe("DUPLICATE_OR_OUT_OF_ORDER");
 
-    const wrongGeneration = policyDecision(applied.state, "CAM-WIDE", 9000, { controlGeneration: 7 });
+    const wrongGeneration = policyDecision(applied.state, "CAM-WIDE", 9000, { controlGeneration: "gen-7" });
     expect(evaluateDecision(applied.state, wrongGeneration, allHealthy, 9000).ack?.rejectReason).toBe(
       "STALE_CONTROL_GENERATION",
     );
@@ -345,11 +349,71 @@ describe("generations", () => {
 
   it("local decisions never reuse a sequence the backend already consumed", () => {
     const { state } = operatorResume(liveOnHost(), "AUTO", 10);
-    const remote = policyDecision(state, "CAM-GUEST", 4000, { sequence: 500, controlGeneration: 0 });
+    const remote = policyDecision(state, "CAM-GUEST", 4000, { sequence: 500, controlGeneration: "local" });
     const applied = evaluateDecision(state, remote, allHealthy, 4000);
     expect(applied.state.program.source).toBe("CAM-GUEST");
     const manual = operatorTake(applied.state, "CAM-WIDE", allHealthy, 4100);
     expect(manual.state.program.source).toBe("CAM-WIDE");
     expect(manual.state.pendingAck?.decisionSequence).toBeGreaterThan(500);
+  });
+});
+
+describe("backend control sync", () => {
+  it("adopts the backend's generation, mode and revision and drops pending work on a new generation", () => {
+    const pending = operatorTake(fresh(), "CAM-HOST", allHealthy, 10);
+    expect(pending.state.pendingAck).not.toBeNull();
+    const synced = syncControlState(pending.state, { controlGeneration: "gen-a", mode: "AUTO", modeRevision: 9 }, 20);
+    expect(synced.state.controlGeneration).toBe("gen-a");
+    expect(synced.state.mode).toBe("AUTO");
+    expect(synced.state.modeRevision).toBe(9);
+    expect(synced.state.pendingAck).toBeNull();
+    expect(synced.state.acks[0]?.rejectReason).toBe("STALE_CONTROL_GENERATION");
+  });
+
+  it("executes a backend policy command in AUTO once the clock is mapped", () => {
+    let { state } = syncControlState(liveOnHost(), { controlGeneration: "gen-a", mode: "AUTO", modeRevision: 3 }, 50);
+    state = { ...state, backendClockOffsetMs: -1_000_000 };
+    const command = policyDecision(state, "CAM-GUEST", 5000, {
+      controlGeneration: "gen-a",
+      modeRevision: 3,
+      issuerDecisionId: "dec-42",
+      clockDomain: "backend",
+      createdAtMs: 1_005_000,
+      expiresAtMs: 1_009_000,
+    });
+    const step = evaluateDecision(state, command, allHealthy, 5000);
+    expect(step.state.program.source).toBe("CAM-GUEST");
+    const drawn = confirmDraw(step.state, { source: "CAM-GUEST", videoTrackSid: "TR_CAM-GUEST" }, 5040);
+    expect(drawn.ack?.issuerDecisionId).toBe("dec-42");
+    expect(drawn.ack?.controlGeneration).toBe("gen-a");
+  });
+
+  it("is a no-op when nothing changed", () => {
+    const state = liveOnHost();
+    expect(syncControlState(state, { controlGeneration: state.controlGeneration, mode: state.mode, modeRevision: state.modeRevision }, 1).state).toBe(state);
+  });
+});
+
+describe("failed acknowledgement", () => {
+  it("fails a switch that never drew and reverts to the previous source", () => {
+    let state = runHealthCheck(liveOnHost(), allHealthy, 100).state;
+    const step = operatorTake(state, "CAM-GUEST", allHealthy, 200);
+    state = step.state;
+    expect(state.pendingAck).not.toBeNull();
+
+    expect(expirePendingAck(state, allHealthy, 200 + ACK_TIMEOUT_MS - 1).ack).toBeNull();
+    const expired = expirePendingAck(state, allHealthy, 200 + ACK_TIMEOUT_MS);
+    expect(expired.ack?.outcome).toBe("FAILED");
+    expect(expired.ack?.rejectReason).toBe("ACK_TIMEOUT");
+    expect(expired.state.program.source).toBe("CAM-HOST");
+    expect(expired.state.program.reason).toBe("ACK_TIMEOUT_REVERT");
+  });
+
+  it("falls back to the slate when nothing else is renderable", () => {
+    const step = operatorTake(fresh(), "CAM-GUEST", allHealthy, 200);
+    const nothing = readinessWith({});
+    const expired = expirePendingAck(step.state, nothing, 200 + ACK_TIMEOUT_MS);
+    expect(expired.ack?.outcome).toBe("FAILED");
+    expect(expired.state.program.source).toBe("SLATE");
   });
 });

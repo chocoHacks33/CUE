@@ -2,6 +2,8 @@ import {
   CAMERA_CONTRACTS,
   CAMERA_IDS,
   type CameraId,
+  type ObservationSnapshot,
+  parseObservationSnapshot,
   parsePublisherMetadata,
   type ProgramSource,
   type ReceiverReadiness,
@@ -18,6 +20,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ProgramPanel } from "../compositor/ProgramPanel";
 import { RecordingTest } from "../recording/RecordingTest";
+import { describeEvidence, type EvidenceLine } from "./evidenceView";
 import { PairingPanel } from "./PairingPanel";
 import { buildReadiness } from "./readiness";
 import { requestReceiverToken } from "./receiverApi";
@@ -101,6 +104,9 @@ function formatAge(ms: number | null): string {
 export function ProducerPage() {
   const [apiBaseUrl, setApiBaseUrl] = useState(DEFAULT_API_URL);
   const [bootstrapSecret, setBootstrapSecret] = useState("");
+  const [producerSecret, setProducerSecret] = useState("");
+  const [evidence, setEvidence] = useState<ObservationSnapshot | null>(null);
+  const [evidenceError, setEvidenceError] = useState<string | null>(null);
   const [eventId, setEventId] = useState("hackmit-demo");
   const [displayName, setDisplayName] = useState("Person D");
   const [status, setStatus] = useState<ReceiverStatus>("idle");
@@ -186,6 +192,42 @@ export function ProducerPage() {
     }, TICK_MS);
     return () => window.clearInterval(id);
   }, []);
+
+  // Evidence: poll B's observation snapshot while connected. Read-only, operator-side only.
+  useEffect(() => {
+    if (status !== "connected" || !bootstrapSecret.trim()) {
+      setEvidence(null);
+      return;
+    }
+    let cancelled = false;
+    let failures = 0;
+    const poll = async () => {
+      try {
+        const response = await fetch(
+          `${apiBaseUrl.replace(/\/+$/, "")}/api/v1/guests/observations?event_id=${encodeURIComponent(connectedEventRef.current)}`,
+          { headers: { "X-CUE-Bootstrap-Secret": bootstrapSecret.trim(), "ngrok-skip-browser-warning": "1" } },
+        );
+        if (!response.ok) throw new Error(`observations ${response.status}`);
+        const snapshot = parseObservationSnapshot(await response.json());
+        if (!cancelled) {
+          setEvidence(snapshot);
+          setEvidenceError(null);
+          failures = 0;
+        }
+      } catch (error) {
+        failures += 1;
+        if (!cancelled && failures === 1) {
+          setEvidenceError(error instanceof Error ? error.message : String(error));
+        }
+      }
+    };
+    void poll();
+    const id = window.setInterval(() => void poll(), 500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [apiBaseUrl, bootstrapSecret, status]);
 
   const stopFrameWatcher = useCallback((cameraId: CameraId) => {
     const watcher = frameWatchers.current.get(cameraId);
@@ -671,6 +713,16 @@ export function ProducerPage() {
               />
             </label>
 
+            <label>
+              Producer secret (this Mac only; enables pairing and the control link)
+              <input
+                type="password"
+                value={producerSecret}
+                autoComplete="off"
+                onChange={(event) => setProducerSecret(event.target.value)}
+              />
+            </label>
+
             <div className="actions">
               <button
                 type="button"
@@ -718,7 +770,7 @@ export function ProducerPage() {
             </p>
           </div>
 
-          <PairingPanel apiBaseUrl={apiBaseUrl} eventId={eventId} onLog={appendLog} />
+          <PairingPanel apiBaseUrl={apiBaseUrl} eventId={eventId} producerSecret={producerSecret} onLog={appendLog} />
 
           <div className="panel form-panel">
             <h2>Master audio</h2>
@@ -775,6 +827,8 @@ export function ProducerPage() {
             rendererId={rendererIdRef.current}
             rendererGeneration={rendererGeneration}
             connected={status === "connected" || status === "reconnecting"}
+            apiBaseUrl={apiBaseUrl}
+            producerSecret={producerSecret}
             readiness={readiness}
             getSourceElement={getSourceElement}
             getMasterAudioTrack={getMasterAudioTrack}
@@ -793,6 +847,14 @@ export function ProducerPage() {
                 {readyCount}/{CAMERA_IDS.length} live
               </span>
             </div>
+            <p className="detail">
+              Evidence:{" "}
+              {evidence
+                ? `snapshot ${Math.round((Date.now() - evidence.nowMs) / 100) / 10} s old · gallery v${evidence.galleryVersion}`
+                : evidenceError
+                  ? `unavailable (${evidenceError})`
+                  : "not polling"}
+            </p>
             <div className="slots">
               {CAMERA_IDS.map((cameraId) => (
                 <SlotTile
@@ -800,6 +862,15 @@ export function ProducerPage() {
                   slot={slots[cameraId]}
                   now={now}
                   registerVideo={registerVideo}
+                  evidence={
+                    evidence
+                      ? describeEvidence(
+                          evidence.cameras.find((view) => view.cameraId === cameraId) ?? null,
+                          evidence.nowMs,
+                          slots[cameraId].streamEpoch,
+                        )
+                      : null
+                  }
                 />
               ))}
             </div>
@@ -882,9 +953,10 @@ interface SlotTileProps {
   slot: SlotState;
   now: number;
   registerVideo: (cameraId: CameraId, element: HTMLVideoElement | null) => void;
+  evidence: EvidenceLine | null;
 }
 
-function SlotTile({ slot, now, registerVideo }: SlotTileProps) {
+function SlotTile({ slot, now, registerVideo, evidence }: SlotTileProps) {
   const contract = CAMERA_CONTRACTS[slot.cameraId];
   const age = frameAgeMs(slot, now);
   const videoRef = useCallback(
@@ -940,6 +1012,18 @@ function SlotTile({ slot, now, registerVideo }: SlotTileProps) {
             <dd>{slot.previousVideoTrackSids.join(", ")}</dd>
           </>
         )}
+        <dt>Who</dt>
+        <dd className={evidence ? `evidence evidence-${evidence.tone}` : undefined}>
+          {evidence ? (
+            <>
+              <strong>{evidence.headline}</strong>
+              <br />
+              <span>{evidence.detail}</span>
+            </>
+          ) : (
+            "evidence off"
+          )}
+        </dd>
         <dt>Last frame</dt>
         <dd>{formatAge(age)}</dd>
         <dt>Frames</dt>

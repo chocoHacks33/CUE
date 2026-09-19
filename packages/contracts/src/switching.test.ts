@@ -13,7 +13,8 @@ const decision: ShotDecision = {
   contractVersion: SWITCHING_CONTRACT_VERSION,
   eventId: "hackmit-demo",
   sequence: 4,
-  controlGeneration: 0,
+  controlGeneration: "local",
+  issuerDecisionId: null,
   modeRevision: 3,
   origin: "OPERATOR",
   target: "CAM-GUEST",
@@ -29,7 +30,8 @@ const ack: RenderAck = {
   contractVersion: SWITCHING_CONTRACT_VERSION,
   eventId: "hackmit-demo",
   decisionSequence: 4,
-  controlGeneration: 0,
+  controlGeneration: "local",
+  issuerDecisionId: null,
   rendererId: "renderer-1",
   rendererGeneration: 1,
   outcome: "APPLIED",
@@ -53,7 +55,9 @@ describe("switching contracts", () => {
   it("validates a shot decision", () => {
     expect(isShotDecision(decision)).toBe(true);
     expect(isShotDecision({ ...decision, target: "CAM-9" })).toBe(false);
-    expect(isShotDecision({ ...decision, reason: "BECAUSE" })).toBe(false);
+    expect(isShotDecision({ ...decision, reason: "" })).toBe(false);
+    expect(isShotDecision({ ...decision, reason: "POLICY_ANYTHING" })).toBe(true);
+    expect(isShotDecision({ ...decision, controlGeneration: 7 })).toBe(false);
     expect(isShotDecision({ ...decision, origin: "MODEL" })).toBe(false);
     expect(isShotDecision({ ...decision, clockDomain: "wall" })).toBe(false);
     expect(isShotDecision({ ...decision, contractVersion: "9.9.9" })).toBe(false);
@@ -62,6 +66,7 @@ describe("switching contracts", () => {
   it("validates a render acknowledgement", () => {
     expect(isRenderAck(ack)).toBe(true);
     expect(isRenderAck({ ...ack, outcome: "MAYBE" })).toBe(false);
+    expect(isRenderAck({ ...ack, outcome: "FAILED", rejectReason: "ACK_TIMEOUT" })).toBe(true);
     expect(isRenderAck({ ...ack, rejectReason: "GUT_FEELING" })).toBe(false);
     expect(isRenderAck({ ...ack, renderedSource: "CAM-9" })).toBe(false);
     expect(isRenderAck({ ...ack, clockDomain: "backend" })).toBe(false);
