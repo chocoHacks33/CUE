@@ -53,3 +53,9 @@ python -m ruff check .
 ```
 
 See [docs/stage-0-a-handoff.md](docs/stage-0-a-handoff.md) for the A-to-D live proof and the exact exit criteria that still require the physical MacBook.
+
+## Producer receiver (Person D's Mac)
+
+`/producer` on the same web app is the subscribe-only Stage 0 receiver. It requests a credential from `POST /api/v1/stage0/receiver-token` (same Stage 0 secret, `canPublish: false`), joins the same room, and binds `CAM-HOST`, `CAM-GUEST` and `CAM-WIDE` tiles from each participant's server-set metadata. Only `CAM-HOST`'s microphone is played. The Mac never publishes.
+
+Mac startup, tunnel and verification steps: [docs/stage-0-d-mac-run.md](docs/stage-0-d-mac-run.md).
