@@ -53,6 +53,7 @@ Person B's work is one document per stage:
 - [docs/b-stage-1.md](docs/b-stage-1.md) — video-only capture, enrolment/reference module, feed to the Mac
 - [docs/b-stage-2-prep.md](docs/b-stage-2-prep.md) — live observations, abstention, expiry and track/epoch association, offline
 - [docs/b-stage-2.md](docs/b-stage-2.md) — the live wiring: A's frames in, observations posted, epochs and withdrawals handled
+- [docs/b-stage-3-prep.md](docs/b-stage-3-prep.md) — the measuring instrument: calibration fitting, threshold selection, identity-report tallies
 
 ```bash
 python -m pip install -e "apps/api[dev]"           # core, no OpenCV needed
