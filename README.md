@@ -46,11 +46,12 @@ Camera access works on `localhost` or HTTPS. A different laptop cannot use D's `
 references live in memory on D's Mac, are deleted on withdrawal or at event end,
 and an unknown face stays unknown.
 
-Person B's scope is Stage 0, Stage 1 prep and Stage 1 — one document each:
+Person B's work is one document per stage:
 
 - [docs/b-stage-0.md](docs/b-stage-0.md) — model weights and licences, consent roster, privacy behaviour
 - [docs/b-stage-prep-1.md](docs/b-stage-prep-1.md) — contracts and cross-language fixtures
 - [docs/b-stage-1.md](docs/b-stage-1.md) — video-only capture, enrolment/reference module, feed to the Mac
+- [docs/b-stage-2-prep.md](docs/b-stage-2-prep.md) — live observations, abstention, expiry and track/epoch association, offline
 
 ```bash
 python -m pip install -e "apps/api[dev]"           # core, no OpenCV needed

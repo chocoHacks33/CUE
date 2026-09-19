@@ -94,10 +94,9 @@ uses scripted fixtures.
 
 ## Not in scope here
 
-Live observation intake, gallery matching, track association and calibration
-are not part of Stage 0 or Stage 1 and are not in this branch. Nothing here
-produces an observation, and `PurgeReceipt.observations_dropped` always
-reports `0` for that reason.
+Live observation intake, gallery matching, track association and calibration are
+not part of Stage 0 or Stage 1. They are Stage 2 prep, and they arrive with
+[b-stage-2-prep.md](b-stage-2-prep.md) rather than here.
 
 ## What has to happen next, in order
 

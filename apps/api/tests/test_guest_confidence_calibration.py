@@ -1,0 +1,36 @@
+from __future__ import annotations
+
+import pytest
+
+from cue_api.guests.confidence_calibration import (
+    NO_CALIBRATION,
+    PROVISIONAL_CALIBRATION,
+    SFACE_COSINE_REFERENCE,
+)
+from cue_api.guests.types import CalibrationStatus
+
+
+def test_the_provisional_mapping_is_labelled_as_provisional() -> None:
+    assert PROVISIONAL_CALIBRATION.status is CalibrationStatus.PROVISIONAL_DEFAULT
+    assert PROVISIONAL_CALIBRATION.sample_count == 0
+
+
+def test_the_provisional_mapping_sits_on_the_published_reference_point() -> None:
+    assert PROVISIONAL_CALIBRATION.confidence(SFACE_COSINE_REFERENCE) == pytest.approx(0.5)
+
+
+def test_confidence_rises_with_similarity() -> None:
+    low = PROVISIONAL_CALIBRATION.confidence(0.2)
+    high = PROVISIONAL_CALIBRATION.confidence(0.7)
+
+    assert low is not None and high is not None
+    assert low < 0.2 < 0.8 < high
+
+
+def test_an_uncalibrated_run_reports_no_confidence_at_all() -> None:
+    assert NO_CALIBRATION.confidence(0.9) is None
+    assert NO_CALIBRATION.status is CalibrationStatus.UNCALIBRATED
+
+
+def test_a_missing_similarity_yields_no_confidence() -> None:
+    assert PROVISIONAL_CALIBRATION.confidence(None) is None

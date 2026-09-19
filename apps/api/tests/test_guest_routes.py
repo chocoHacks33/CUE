@@ -1,11 +1,9 @@
-"""Person B — guest consent and enrolment routes (Stage 0/1).
-
-Live observation intake is Stage 2 and is not wired up here.
-"""
+"""Person B — guest consent, enrolment and observation routes."""
 
 from __future__ import annotations
 
 import json
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -280,3 +278,182 @@ def test_the_reference_fixture_is_accepted_and_normalised(client: TestClient) ->
     vector = gallery["entries"][0]["embeddings"][0]
     assert sum(value * value for value in vector) == pytest.approx(1.0)
     assert vector[0] == pytest.approx(0.6)
+
+
+def observation_payload(**overrides: Any) -> dict[str, Any]:
+    payload = json.loads((FIXTURES / "visual-observation.confirmed.json").read_text("utf-8"))
+    for key, value in overrides.items():
+        if isinstance(value, dict) and isinstance(payload.get(key), dict):
+            payload[key] = {**payload[key], **value}
+        else:
+            payload[key] = value
+    return payload
+
+
+def test_an_observation_naming_an_unknown_guest_is_refused(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/guests/observations",
+        headers=HEADERS,
+        json=observation_payload(),
+    )
+
+    assert response.status_code == 409
+    assert "not an identifiable consenting guest" in response.json()["detail"]
+
+
+def test_an_observation_naming_a_consenting_guest_is_stored(client: TestClient) -> None:
+    enrolled_sarah(client)
+
+    accepted = client.post(
+        "/api/v1/guests/observations",
+        headers=HEADERS,
+        json=observation_payload(),
+    )
+
+    assert accepted.status_code == 202
+    snapshot = client.get(
+        "/api/v1/guests/observations",
+        headers=HEADERS,
+        params={"eventId": EVENT},
+    ).json()
+    guest_view = next(
+        view for view in snapshot["cameras"] if view["cameraId"] == "CAM-GUEST"
+    )
+    assert guest_view["observation"]["subject"]["guestId"] == "guest-sarah"
+    assert guest_view["fresh"] is False  # the fixture timestamp is long expired
+
+
+def test_an_anonymous_observation_needs_no_gallery(client: TestClient) -> None:
+    payload = observation_payload(
+        status="UNKNOWN",
+        subject={"guestId": None, "displayName": None, "referenceVersion": None},
+        usableForNamedTake=False,
+    )
+
+    response = client.post("/api/v1/guests/observations", headers=HEADERS, json=payload)
+
+    assert response.status_code == 202
+
+
+def test_a_named_take_must_be_confirmed(client: TestClient) -> None:
+    enrolled_sarah(client)
+    payload = observation_payload(status="PROVISIONAL")
+
+    response = client.post("/api/v1/guests/observations", headers=HEADERS, json=payload)
+
+    assert response.status_code == 422
+
+
+def test_an_unknown_status_may_not_carry_a_name(client: TestClient) -> None:
+    enrolled_sarah(client)
+    payload = observation_payload(status="UNKNOWN", usableForNamedTake=False)
+
+    response = client.post("/api/v1/guests/observations", headers=HEADERS, json=payload)
+
+    assert response.status_code == 422
+
+
+def test_an_observation_from_a_superseded_epoch_is_refused(client: TestClient) -> None:
+    enrolled_sarah(client)
+    client.post("/api/v1/guests/observations", headers=HEADERS, json=observation_payload())
+
+    republished = client.post(
+        "/api/v1/guests/observations",
+        headers=HEADERS,
+        json=observation_payload(streamEpoch=4, observationId="newer"),
+    )
+    late_from_old_epoch = client.post(
+        "/api/v1/guests/observations",
+        headers=HEADERS,
+        json=observation_payload(streamEpoch=3, observationId="older"),
+    )
+
+    assert republished.status_code == 202
+    assert late_from_old_epoch.status_code == 409
+
+
+def test_an_epoch_change_invalidates_the_stored_evidence(client: TestClient) -> None:
+    enrolled_sarah(client)
+    client.post("/api/v1/guests/observations", headers=HEADERS, json=observation_payload())
+
+    snapshot = client.post(
+        "/api/v1/guests/invalidate",
+        headers=HEADERS,
+        json={
+            "eventId": EVENT,
+            "cameraId": "CAM-GUEST",
+            "currentStreamEpoch": 4,
+            "reason": "guest camera reframed",
+        },
+    ).json()
+
+    guest_view = next(view for view in snapshot["cameras"] if view["cameraId"] == "CAM-GUEST")
+    assert guest_view["observation"] is None
+
+
+def test_withdrawing_consent_removes_the_live_observation(client: TestClient) -> None:
+    guest_id = enrolled_sarah(client)
+    client.post("/api/v1/guests/observations", headers=HEADERS, json=observation_payload())
+
+    receipt = client.delete(
+        f"/api/v1/guests/{guest_id}",
+        headers=HEADERS,
+        params={"eventId": EVENT},
+    ).json()
+
+    assert receipt["observationsDropped"] == 1
+    snapshot = client.get(
+        "/api/v1/guests/observations",
+        headers=HEADERS,
+        params={"eventId": EVENT},
+    ).json()
+    assert all(view["observation"] is None for view in snapshot["cameras"])
+
+
+def test_the_snapshot_covers_every_camera_even_without_evidence(client: TestClient) -> None:
+    snapshot = client.get(
+        "/api/v1/guests/observations",
+        headers=HEADERS,
+        params={"eventId": EVENT},
+    ).json()
+
+    assert [view["cameraId"] for view in snapshot["cameras"]] == [
+        "CAM-HOST",
+        "CAM-GUEST",
+        "CAM-WIDE",
+    ]
+    assert all(view["fresh"] is False for view in snapshot["cameras"])
+
+
+def test_tallies_report_abstentions_alongside_confirmations(client: TestClient) -> None:
+    enrolled_sarah(client)
+    client.post("/api/v1/guests/observations", headers=HEADERS, json=observation_payload())
+    client.post(
+        "/api/v1/guests/observations",
+        headers=HEADERS,
+        json=observation_payload(
+            observationId="obs-2",
+            status="UNKNOWN",
+            subject={"guestId": None, "displayName": None, "referenceVersion": None},
+            usableForNamedTake=False,
+        ),
+    )
+
+    tallies = client.get(
+        "/api/v1/guests/tallies",
+        headers=HEADERS,
+        params={"eventId": EVENT},
+    ).json()
+
+    assert tallies["statusCounts"]["CONFIRMED"] == 1
+    assert tallies["statusCounts"]["UNKNOWN"] == 1
+    assert tallies["epochs"]["CAM-GUEST"] == 3
+
+
+def test_an_observation_cannot_be_smuggled_in_with_extra_fields(client: TestClient) -> None:
+    payload = deepcopy(observation_payload())
+    payload["cameraCommand"] = "TAKE"
+
+    response = client.post("/api/v1/guests/observations", headers=HEADERS, json=payload)
+
+    assert response.status_code == 422
