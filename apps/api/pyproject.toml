@@ -22,6 +22,12 @@ dev = [
   "pytest>=8.4,<9",
   "ruff>=0.12,<1",
 ]
+# prototypes/desk/server.py — C-lane desk prototype (localhost only).
+# Not required for the release path.
+desk = [
+  "deepgram-sdk>=7,<8",
+  "sounddevice>=0.4,<1",
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]

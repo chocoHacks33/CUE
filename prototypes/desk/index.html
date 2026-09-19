@@ -1,0 +1,398 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=1200,initial-scale=1" />
+<title>CUE desk</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --ground: #0e1013;
+    --panel:  #171a1f;
+    --line:   #2a2f37;
+    --text:   #e8eaed;
+    --muted:  #a3acb7;
+    --live:   #e5484d;
+    --ready:  #5fe0a0;
+    --hold:   #f5c451;
+    --label:  "Barlow Condensed", "Barlow", system-ui, sans-serif;
+    --body:   "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 15px;
+    height: 100%;
+  }
+  h1, h2, h3, .label { font-family: var(--label); font-weight: 700;
+                       letter-spacing: 0.06em; text-transform: uppercase; }
+  .muted  { color: var(--muted); }
+  .banner {
+    background: var(--panel); border-bottom: 1px solid var(--hold);
+    color: var(--hold); padding: 10px 24px;
+    font-family: var(--label); letter-spacing: 0.05em;
+  }
+  .banner.hidden { display: none; }
+  .fixture-tag {
+    display: inline-block; padding: 2px 8px; margin-left: 12px;
+    background: var(--hold); color: #000; font-family: var(--label);
+    font-size: 12px; letter-spacing: 0.08em; border-radius: 3px;
+  }
+  .app {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 320px;
+    gap: 24px;
+    padding: 24px;
+    height: calc(100% - 0px);
+  }
+  /* --- left column: programme + captions + reason + button --- */
+  .left { display: grid; grid-template-rows: auto auto auto auto 1fr; gap: 20px; }
+  .programme {
+    position: relative;
+    background: #000;
+    border: 4px solid transparent;
+    border-radius: 8px;
+    aspect-ratio: 16 / 9;
+    overflow: hidden;
+  }
+  .programme.live { border-color: var(--live); box-shadow: 0 0 24px rgba(229,72,77,0.35); }
+  .programme video { width: 100%; height: 100%; object-fit: cover; }
+  .programme .live-badge {
+    position: absolute; top: 12px; left: 14px;
+    padding: 4px 10px; background: var(--live); color: #fff;
+    font-family: var(--label); font-weight: 700;
+    letter-spacing: 0.12em; font-size: 13px; border-radius: 3px;
+  }
+  .caption {
+    background: var(--panel); border: 1px solid var(--line);
+    padding: 18px 22px; border-radius: 8px; min-height: 76px;
+    font-size: 24px; line-height: 1.35;
+  }
+  .caption .prov  { color: var(--muted); }
+  .caption .final { color: var(--text); }
+  .plain-reason {
+    background: var(--panel); border: 1px solid var(--line);
+    padding: 22px; border-radius: 8px; font-size: 28px; line-height: 1.35;
+    min-height: 80px;
+  }
+  .plain-reason.take   { color: var(--ready); }
+  .plain-reason.stay   { color: var(--text); }
+  .plain-reason.slate  { color: var(--live); }
+  .plain-reason.manual { color: var(--hold); }
+  .action-row {
+    display: flex; gap: 16px; align-items: center;
+  }
+  .big-btn {
+    flex: 1; padding: 22px; border-radius: 8px; border: none;
+    background: var(--panel); color: var(--text);
+    font-family: var(--label); letter-spacing: 0.08em;
+    font-size: 22px; cursor: pointer; border: 1px solid var(--line);
+  }
+  .big-btn.hold   { background: var(--hold); color: #000; border-color: var(--hold); }
+  .big-btn.resume { background: var(--ready); color: #000; border-color: var(--ready); }
+  .details-toggle { padding: 22px 28px; border-radius: 8px; border: 1px solid var(--line);
+                    background: transparent; color: var(--muted);
+                    font-family: var(--label); letter-spacing: 0.08em;
+                    font-size: 15px; cursor: pointer; }
+
+  /* --- right column: camera tiles --- */
+  .right { display: grid; grid-template-rows: repeat(3, 1fr); gap: 16px; min-width: 0; }
+  .tile {
+    position: relative;
+    background: var(--panel);
+    border: 3px solid var(--line);
+    border-radius: 8px;
+    aspect-ratio: 16 / 9;
+    cursor: pointer;
+    overflow: hidden;
+    display: flex; align-items: flex-end; padding: 10px;
+    transition: border-color 0.12s ease;
+  }
+  .tile:hover { border-color: var(--muted); }
+  .tile.live  { border-color: var(--live); box-shadow: 0 0 16px rgba(229,72,77,0.35); }
+  .tile .label { font-size: 18px; color: var(--text); }
+  .tile .state { position: absolute; top: 10px; right: 10px;
+                 padding: 3px 8px; border-radius: 3px;
+                 font-family: var(--label); font-size: 12px; letter-spacing: 0.1em;
+                 background: var(--ready); color: #000; }
+  .tile.live .state  { background: var(--live); color: #fff; }
+  .tile .placeholder {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-family: var(--label); font-size: 26px;
+    letter-spacing: 0.1em;
+  }
+
+  /* --- details drawer --- */
+  .details {
+    grid-column: 1 / -1; background: var(--panel);
+    border: 1px solid var(--line); border-radius: 8px;
+    padding: 18px 22px; max-height: 40vh; overflow: auto;
+  }
+  .details.hidden { display: none; }
+  .details .row { display: grid; grid-template-columns: 130px 1fr; gap: 10px; padding: 4px 0; }
+  .details .row .k { color: var(--muted); font-family: var(--label); letter-spacing: 0.08em; font-size: 12px; }
+  .log {
+    margin-top: 12px; font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px; color: var(--muted); line-height: 1.5;
+    max-height: 220px; overflow: auto; border-top: 1px solid var(--line); padding-top: 10px;
+  }
+  .log .live    { color: var(--text); }
+  .log .fixture { color: var(--hold); }
+  .kbd {
+    display: inline-block; margin-left: 12px; padding: 2px 6px;
+    background: var(--panel); border: 1px solid var(--line);
+    color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace;
+    font-size: 12px; border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+
+<div id="banner" class="banner hidden"></div>
+
+<div class="app">
+  <div class="left">
+    <div id="programme" class="programme live">
+      <video id="programme-video" autoplay muted playsinline></video>
+      <div class="live-badge">LIVE</div>
+    </div>
+
+    <div class="caption">
+      <span id="prov" class="prov"></span>
+      <span id="final" class="final"></span>
+    </div>
+
+    <div id="plain-reason" class="plain-reason stay">Waiting for something to happen&hellip;</div>
+
+    <div class="action-row">
+      <button id="big-btn" class="big-btn">Take over
+        <span class="kbd">H</span>
+      </button>
+      <button id="details-btn" class="details-toggle">Details</button>
+    </div>
+
+    <div id="details" class="details hidden">
+      <div class="row"><div class="k">Who</div>       <div id="d-who">&mdash;</div></div>
+      <div class="row"><div class="k">When</div>      <div id="d-when">&mdash;</div></div>
+      <div class="row"><div class="k">Scope</div>     <div id="d-scope">&mdash;</div></div>
+      <div class="row"><div class="k">Decision</div>  <div id="d-decision">&mdash;</div></div>
+      <div class="row"><div class="k">Reason</div>    <div id="d-reason">&mdash;</div></div>
+      <div class="row"><div class="k">Latencies</div> <div id="d-latencies">&mdash;</div></div>
+      <div class="row"><div class="k">Decision seq</div><div id="d-seq">&mdash;</div></div>
+      <div class="row"><div class="k">Mode revision</div><div id="d-rev">&mdash;</div></div>
+      <div class="log" id="log"></div>
+    </div>
+  </div>
+
+  <div class="right">
+    <div class="tile live" data-cam="CAM-HOST">
+      <div class="placeholder">CAM-HOST</div>
+      <span class="label">Host</span>
+      <span class="state">LIVE</span>
+      <span class="kbd" style="position:absolute; bottom:10px; right:10px;">1</span>
+    </div>
+    <div class="tile" data-cam="CAM-GUEST">
+      <div class="placeholder">CAM-GUEST</div>
+      <span class="label">Guest</span>
+      <span class="state">READY</span>
+      <span class="kbd" style="position:absolute; bottom:10px; right:10px;">2</span>
+    </div>
+    <div class="tile" data-cam="CAM-WIDE">
+      <div class="placeholder">CAM-WIDE</div>
+      <span class="label">Wide</span>
+      <span class="state">READY</span>
+      <span class="kbd" style="position:absolute; bottom:10px; right:10px;">3</span>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const KEY_TO_CAM = { "1": "CAM-HOST", "2": "CAM-GUEST", "3": "CAM-WIDE" };
+const $ = (id) => document.getElementById(id);
+
+let ws = null;
+let mode = "AUTO";
+let autoPaused = false;
+let currentCamera = "CAM-HOST";
+let sourceMode = "fixture";
+
+// --- webcam preview on the programme tile ------------------------------
+async function startProgrammeCam() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 1280, height: 720 }, audio: false,
+    });
+    $("programme-video").srcObject = stream;
+  } catch (err) {
+    $("programme-video").style.background = "#000";
+  }
+}
+
+// --- socket ------------------------------------------------------------
+function connect() {
+  const proto = location.protocol === "https:" ? "wss:" : "ws:";
+  ws = new WebSocket(`${proto}//${location.host}/ws`);
+  ws.onopen    = () => appendLog("live", "connected to server");
+  ws.onclose   = () => appendLog("live", "disconnected. retrying in 1s");
+  ws.onerror   = () => {};
+  ws.onmessage = (ev) => onMessage(JSON.parse(ev.data));
+  ws.onclose   = () => setTimeout(connect, 1000);
+}
+
+function send(kind, extra = {}) {
+  if (!ws || ws.readyState !== 1) return;
+  ws.send(JSON.stringify({ kind, ...extra }));
+}
+
+// --- inbound events ----------------------------------------------------
+function onMessage(msg) {
+  const kind = msg.kind || "";
+  if (kind === "banner") {
+    const el = $("banner");
+    el.textContent = msg.text;
+    el.classList.remove("hidden");
+    return;
+  }
+  if (kind === "mode") {
+    mode = msg.mode || "AUTO";
+    autoPaused = !!msg.auto_paused;
+    currentCamera = msg.current_camera || currentCamera;
+    sourceMode = msg.source || sourceMode;
+    if (msg.directing_enabled === false) {
+      showBanner("Captions live. Directing needs the production model.");
+    }
+    renderTiles();
+    renderBigBtn();
+    return;
+  }
+  if (kind === "caption_provisional") {
+    $("prov").textContent = msg.text;
+    return;
+  }
+  if (kind === "caption_final") {
+    $("prov").textContent = "";
+    const marker = msg.source === "FIXTURE" ? " " : " ";
+    $("final").innerHTML = escapeHTML(msg.text) + marker
+      + (msg.source === "FIXTURE" ? `<span class="fixture-tag">FIXTURE</span>` : "");
+    return;
+  }
+  if (kind === "decision") {
+    const rec = msg.record || {};
+    const isFixture = (rec.source === "FIXTURE") || (msg.source_mode === "fixture");
+    renderDecision(rec, isFixture);
+    appendLog(isFixture ? "fixture" : "live",
+      `#${rec.decision_seq} rev=${rec.mode_revision} ${rec.action} ${rec.camera_id || ""} — ${rec.reason || ""}`);
+    if (rec.action === "TAKE" && rec.camera_id) {
+      currentCamera = rec.camera_id;
+      renderTiles();
+    }
+  }
+}
+
+function renderDecision(rec, isFixture) {
+  const pr = $("plain-reason");
+  pr.textContent = rec.plain_reason || rec.reason || "";
+  pr.classList.remove("take", "stay", "slate", "manual");
+  if ((rec.reason || "").toLowerCase().startsWith("manual")) pr.classList.add("manual");
+  else if (rec.action === "TAKE")  pr.classList.add("take");
+  else if (rec.action === "SLATE") pr.classList.add("slate");
+  else                              pr.classList.add("stay");
+  if (isFixture) pr.innerHTML += ` <span class="fixture-tag">FIXTURE</span>`;
+
+  const cs = rec.cue_summary || {};
+  $("d-who").textContent      = (cs.target_guest_ids || []).join(", ") || "—";
+  $("d-when").textContent     = cs.temporal_intent || "—";
+  $("d-scope").textContent    = cs.scope || "—";
+  $("d-decision").textContent = `${rec.action} ${rec.camera_id || ""}`;
+  $("d-reason").textContent   = rec.reason || "—";
+  $("d-latencies").textContent = fmtLatencies(rec.latencies_ms || {});
+  $("d-seq").textContent      = rec.decision_seq;
+  $("d-rev").textContent      = rec.mode_revision;
+}
+
+function fmtLatencies(l) {
+  const keys = ["asr", "cue", "decide", "total"];
+  const parts = keys.map(k => l[k] != null ? `${k}: ${Math.round(l[k])}ms` : null)
+                     .filter(Boolean);
+  return parts.length ? parts.join(" · ") : "—";
+}
+
+function renderTiles() {
+  document.querySelectorAll(".tile").forEach(t => {
+    const cam = t.getAttribute("data-cam");
+    const live = (cam === currentCamera);
+    t.classList.toggle("live", live);
+    t.querySelector(".state").textContent = live ? "LIVE" : "READY";
+  });
+  $("programme").classList.toggle("live", true);
+}
+
+function renderBigBtn() {
+  const b = $("big-btn");
+  if (autoPaused || mode === "HOLD") {
+    b.textContent = "Let CUE direct";
+    b.classList.remove("hold");
+    b.classList.add("resume");
+    b.dataset.action = "resume";
+  } else {
+    b.textContent = "Take over";
+    b.classList.remove("resume");
+    b.classList.add("hold");
+    b.dataset.action = "hold";
+  }
+}
+
+function appendLog(cls, text) {
+  const el = document.createElement("div");
+  el.className = cls;
+  el.textContent = `${new Date().toLocaleTimeString()}  ${text}`;
+  const log = $("log");
+  log.appendChild(el);
+  while (log.childElementCount > 200) log.removeChild(log.firstChild);
+  log.scrollTop = log.scrollHeight;
+}
+
+function showBanner(text) {
+  const el = $("banner");
+  el.textContent = text;
+  el.classList.remove("hidden");
+}
+
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;",
+              '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// --- input -------------------------------------------------------------
+document.querySelectorAll(".tile").forEach(t => {
+  t.addEventListener("click", () => send("manual_take", { camera: t.getAttribute("data-cam") }));
+});
+$("big-btn").addEventListener("click", () => {
+  send($("big-btn").dataset.action === "resume" ? "resume_auto" : "hold");
+});
+$("details-btn").addEventListener("click", () => {
+  $("details").classList.toggle("hidden");
+});
+document.addEventListener("keydown", (e) => {
+  if (e.target && ["INPUT", "TEXTAREA"].includes(e.target.tagName)) return;
+  const k = e.key.toLowerCase();
+  if (KEY_TO_CAM[k]) send("manual_take", { camera: KEY_TO_CAM[k] });
+  else if (k === "h") send("hold");
+  else if (k === "a") send("resume_auto");
+});
+
+startProgrammeCam();
+connect();
+renderBigBtn();
+</script>
+</body>
+</html>
