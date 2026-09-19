@@ -1,0 +1,42 @@
+{
+  "name": "long_pause_endpoint",
+  "notes": "Two is_final segments with speech_final=false, then a separate UtteranceEnd message (Deepgram's server-side gap detector) fires the endpoint.",
+  "timeout_s": 1.2,
+  "audio_epoch": 1,
+  "steps": [
+    {"at": 0.50, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 0.0, "duration": 0.50,
+      "is_final": false, "speech_final": false,
+      "channel": {"alternatives": [{"transcript": "sarah please", "confidence": 0.78, "words": []}]}
+    }},
+    {"at": 0.90, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 0.0, "duration": 0.90,
+      "is_final": true, "speech_final": false,
+      "channel": {"alternatives": [{
+        "transcript": "Sarah please", "confidence": 0.94,
+        "words": [
+          {"word": "sarah",  "punctuated_word": "Sarah,",  "start": 0.10, "end": 0.45, "confidence": 0.95},
+          {"word": "please", "punctuated_word": "please",  "start": 0.50, "end": 0.90, "confidence": 0.93}
+        ]
+      }]}
+    }},
+    {"at": 1.60, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 1.00, "duration": 0.60,
+      "is_final": true, "speech_final": false,
+      "channel": {"alternatives": [{
+        "transcript": "come up.", "confidence": 0.96,
+        "words": [
+          {"word": "come", "punctuated_word": "come", "start": 1.05, "end": 1.30, "confidence": 0.96},
+          {"word": "up",   "punctuated_word": "up.",  "start": 1.35, "end": 1.60, "confidence": 0.95}
+        ]
+      }]}
+    }},
+    {"at": 2.70, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "UtteranceEnd",
+      "channel": [0, 1], "last_word_end": 1.60
+    }}
+  ]
+}

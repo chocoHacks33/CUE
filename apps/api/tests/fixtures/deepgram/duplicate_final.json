@@ -1,0 +1,47 @@
+{
+  "name": "duplicate_final",
+  "notes": "Same is_final=true message arrives twice (Deepgram retransmit / caller replay). Segment (start,duration,transcript) key dedupes it; combined text is not doubled.",
+  "timeout_s": 1.2,
+  "audio_epoch": 1,
+  "steps": [
+    {"at": 0.90, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 0.0, "duration": 0.90,
+      "is_final": true, "speech_final": false,
+      "channel": {"alternatives": [{
+        "transcript": "Sarah joins us", "confidence": 0.93,
+        "words": [
+          {"word": "sarah", "punctuated_word": "Sarah", "start": 0.10, "end": 0.45},
+          {"word": "joins", "punctuated_word": "joins", "start": 0.50, "end": 0.75},
+          {"word": "us",    "punctuated_word": "us",    "start": 0.80, "end": 0.90}
+        ]
+      }]}
+    }},
+    {"at": 1.05, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 0.0, "duration": 0.90,
+      "is_final": true, "speech_final": false,
+      "channel": {"alternatives": [{
+        "transcript": "Sarah joins us", "confidence": 0.93,
+        "words": [
+          {"word": "sarah", "punctuated_word": "Sarah", "start": 0.10, "end": 0.45},
+          {"word": "joins", "punctuated_word": "joins", "start": 0.50, "end": 0.75},
+          {"word": "us",    "punctuated_word": "us",    "start": 0.80, "end": 0.90}
+        ]
+      }]}
+    }},
+    {"at": 1.90, "kind": "message", "message": {
+      "audio_epoch": 1, "type": "Results",
+      "start": 1.10, "duration": 0.80,
+      "is_final": true, "speech_final": true,
+      "channel": {"alternatives": [{
+        "transcript": "after the break.", "confidence": 0.95,
+        "words": [
+          {"word": "after", "punctuated_word": "after", "start": 1.15, "end": 1.45},
+          {"word": "the",   "punctuated_word": "the",   "start": 1.50, "end": 1.65},
+          {"word": "break", "punctuated_word": "break.","start": 1.70, "end": 1.90}
+        ]
+      }]}
+    }}
+  ]
+}
