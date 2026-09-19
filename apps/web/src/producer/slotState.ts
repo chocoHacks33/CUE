@@ -1,4 +1,9 @@
-import { CAMERA_IDS, type CameraId, type PublisherMetadata } from "@cue/contracts";
+import {
+  CAMERA_IDS,
+  type CameraBinding,
+  type CameraId,
+  type PublisherMetadata,
+} from "@cue/contracts";
 
 /**
  * Pure state for the three receiver slots. No LiveKit or DOM imports so it can
@@ -71,6 +76,65 @@ export type ClaimResult =
   | { kind: "already-assigned"; cameraId: CameraId }
   | { kind: "conflict"; cameraId: CameraId; holder: string }
   | { kind: "unassigned"; reason: string };
+
+export type BindingReconcileResult =
+  | { kind: "applied"; cameraId: CameraId; epochAdvanced: boolean }
+  | { kind: "unchanged"; cameraId: CameraId }
+  | { kind: "stale"; cameraId: CameraId }
+  | { kind: "conflict"; cameraId: CameraId; holder: string };
+
+/** Apply A's authoritative transport response after a real track event. */
+export function applyAuthoritativeBinding(
+  slots: Slots,
+  binding: CameraBinding,
+  eventId: string,
+): { slots: Slots; result: BindingReconcileResult } {
+  const cameraId = binding.cameraId;
+  const slot = slots[cameraId];
+  if (binding.eventId !== eventId || (slot.streamEpoch ?? 0) > binding.streamEpoch) {
+    return { slots, result: { kind: "stale", cameraId } };
+  }
+  const sameEpoch = slot.streamEpoch === binding.streamEpoch;
+  if (
+    sameEpoch &&
+    slot.publisherIdentity !== null &&
+    slot.publisherIdentity !== binding.participantIdentity
+  ) {
+    return {
+      slots,
+      result: { kind: "conflict", cameraId, holder: slot.publisherIdentity },
+    };
+  }
+  if (
+    sameEpoch &&
+    slot.publisherIdentity === binding.participantIdentity &&
+    slot.videoTrackSid === binding.currentVideoTrackSid
+  ) {
+    return { slots, result: { kind: "unchanged", cameraId } };
+  }
+
+  const epochAdvanced = slot.streamEpoch !== null && binding.streamEpoch > slot.streamEpoch;
+  const previousVideoTrackSids = remember(slot.previousVideoTrackSids, slot.videoTrackSid);
+  const next: SlotState = {
+    ...emptySlot(cameraId),
+    publisherIdentity: binding.participantIdentity,
+    publisherName: binding.displayName,
+    streamEpoch: binding.streamEpoch,
+    videoTrackSid: binding.currentVideoTrackSid,
+    previousVideoTrackSids,
+    videoState: binding.currentVideoTrackSid ? "subscribing" : "publisher-connected",
+    conflictIdentities: [
+      ...slot.conflictIdentities,
+      ...(slot.publisherIdentity && slot.publisherIdentity !== binding.participantIdentity
+        ? [slot.publisherIdentity]
+        : []),
+    ].filter((identity, index, all) => identity !== binding.participantIdentity && all.indexOf(identity) === index),
+  };
+  return {
+    slots: { ...slots, [cameraId]: next },
+    result: { kind: "applied", cameraId, epochAdvanced },
+  };
+}
 
 /**
  * Bind a participant to the slot named by its server metadata. The first

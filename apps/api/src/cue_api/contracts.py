@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 from pydantic.alias_generators import to_camel
@@ -20,6 +21,13 @@ class CameraId(StrEnum):
     HOST = "CAM-HOST"
     GUEST = "CAM-GUEST"
     WIDE = "CAM-WIDE"
+
+
+class TransportOutcome(StrEnum):
+    ATTACHED = "ATTACHED"
+    REPUBLISHED = "REPUBLISHED"
+    DETACHED = "DETACHED"
+    STALE_DETACH_IGNORED = "STALE_DETACH_IGNORED"
 
 
 class CameraRole(StrEnum):
@@ -144,6 +152,34 @@ class CameraBindingResponse(ContractModel):
     display_name: str
     current_video_track_sid: str | None = None
     stream_epoch: int = Field(ge=1)
+
+
+class VideoTrackMutationRequest(ContractModel):
+    camera_id: CameraId
+    participant_identity: str = Field(min_length=8, max_length=180)
+    track_sid: str = Field(min_length=1, max_length=180)
+
+
+class TransportMutationResponse(ContractModel):
+    binding: CameraBindingResponse
+    outcome: TransportOutcome
+    epoch_advanced: bool
+    observation_dropped: bool
+
+
+class EventEndReceipt(ContractModel):
+    event_id: str
+    already_ended: bool
+    mode: Literal["ENDED"]
+    control_sessions_revoked: int = Field(ge=0)
+    grants_deleted: int = Field(ge=0)
+    claims_deleted: int = Field(ge=0)
+    bindings_deleted: int = Field(ge=0)
+    guest_ids_deleted: list[str]
+    references_deleted: int = Field(ge=0)
+    observations_dropped: int = Field(ge=0)
+    readiness_removed: bool
+    ended_at_ms: int = Field(ge=0)
 
 
 class TopologyResponse(ContractModel):
