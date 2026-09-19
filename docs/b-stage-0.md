@@ -74,5 +74,5 @@ Never run: any real pixels. No weights downloaded, no OpenCV wheel installed,
 no face detected. The adapters are written against OpenCV's documented API and
 have never executed.
 
-See also [person-b-stage-1-prep.md](person-b-stage-1-prep.md) and
-[person-b-stage-1.md](person-b-stage-1.md).
+See also [b-prep-stage-1.md](b-prep-stage-1.md) and
+[b-stage-1.md](b-stage-1.md).

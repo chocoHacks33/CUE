@@ -82,5 +82,5 @@ cd apps/api && python -m ruff check .  ->  All checks passed
 on this machine, so the three TypeScript suites above rest on CI. CI passes on
 macOS and Windows for PR #7.
 
-See also [person-b-stage-0.md](person-b-stage-0.md) and
-[person-b-stage-1.md](person-b-stage-1.md).
+See also [b-stage-0.md](b-stage-0.md) and
+[b-stage-1.md](b-stage-1.md).

@@ -123,5 +123,5 @@ because there is no store to drop from yet.
 4. **B's media checks** — `docs/results/b-media-check.template.md`.
 5. **Only then** unpark Stage 2.
 
-See also [person-b-stage-0.md](person-b-stage-0.md) and
-[person-b-stage-1-prep.md](person-b-stage-1-prep.md).
+See also [b-stage-0.md](b-stage-0.md) and
+[b-prep-stage-1.md](b-prep-stage-1.md).

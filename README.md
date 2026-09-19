@@ -49,9 +49,9 @@ and [docs/vision-models.md](docs/vision-models.md).
 
 Person B's scope is Stage 0, Stage 1 prep and Stage 1 — one document each:
 
-- [docs/person-b-stage-0.md](docs/person-b-stage-0.md) — model weight/licence check, consent roster
-- [docs/person-b-stage-1-prep.md](docs/person-b-stage-1-prep.md) — contracts and cross-language fixtures
-- [docs/person-b-stage-1.md](docs/person-b-stage-1.md) — video-only capture, enrolment/reference module, feed to the Mac
+- [docs/b-stage-0.md](docs/b-stage-0.md) — model weight/licence check, consent roster
+- [docs/b-prep-stage-1.md](docs/b-prep-stage-1.md) — contracts and cross-language fixtures
+- [docs/b-stage-1.md](docs/b-stage-1.md) — video-only capture, enrolment/reference module, feed to the Mac
 
 ```bash
 python -m pip install -e "apps/api[dev]"           # core, no OpenCV needed
