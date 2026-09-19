@@ -42,6 +42,8 @@ class QueueEntry:
     utterance: str
     mode_revision: int
     submitted_at: float
+    utterance_id: str = ""
+    created_at: float = 0.0
 
 
 @dataclass
@@ -63,10 +65,28 @@ class SemanticQueue:
 
     # ---- submit / drain ------------------------------------------------
 
-    def submit(self, utterance: str, mode_revision: int, now: float) -> None:
-        """Enqueue an utterance. Drops previous pending if any."""
-        entry = QueueEntry(utterance=utterance, mode_revision=mode_revision,
-                           submitted_at=now)
+    def submit(
+        self,
+        utterance: str,
+        mode_revision: int,
+        now: float,
+        *,
+        utterance_id: str = "",
+        created_at: float = 0.0,
+    ) -> None:
+        """Enqueue an utterance. Drops previous pending if any.
+
+        Optional utterance_id and created_at are threaded to the returned
+        Cue so downstream consumers (DirectorSession) can apply
+        correction and staleness rules unchanged.
+        """
+        entry = QueueEntry(
+            utterance=utterance,
+            mode_revision=mode_revision,
+            submitted_at=now,
+            utterance_id=utterance_id,
+            created_at=created_at,
+        )
         if self._in_flight is None:
             self._in_flight = entry
             return
@@ -103,6 +123,10 @@ class SemanticQueue:
                 cue.mode_revision = entry.mode_revision
                 if not cue.evidence_text:
                     cue.evidence_text = entry.utterance
+                if entry.utterance_id and not cue.utterance_id:
+                    cue.utterance_id = entry.utterance_id
+                if entry.created_at and not cue.created_at:
+                    cue.created_at = entry.created_at
         # Advance the queue.
         self._in_flight = self._pending
         self._pending = None
@@ -133,6 +157,8 @@ class SemanticQueue:
             temporal_intent=TemporalIntent.UNCERTAIN,
             action=Action.HOLD,
             evidence_text=entry.utterance,
+            utterance_id=entry.utterance_id,
+            created_at=entry.created_at,
             mode_revision=entry.mode_revision,
         )
 

@@ -64,7 +64,14 @@ class DirectorSession:
         current_camera: str | None = None,
         wide_camera: str | None = "CAM-WIDE",
     ) -> None:
-        self._state = State(current_camera=current_camera, mode=Mode.AUTO)
+        # last_cut_time seeded far in the past ("no cut has happened yet")
+        # so the min-shot gate in decide() does not fire on the session's
+        # very first cue when `now` is small (e.g. tests, fresh boot).
+        self._state = State(
+            current_camera=current_camera,
+            last_cut_time=-1e9,
+            mode=Mode.AUTO,
+        )
         self._wide_camera = wide_camera
         self._decision_seq = 0
         self._mode_revision = 0
@@ -212,6 +219,19 @@ class DirectorSession:
         explicit, including after reconnect.').
         """
         return
+
+    def note_stay(self, reason: str) -> SessionDecision:
+        """Issue a STAY decision without touching state or mode_revision.
+
+        Used by CLane when something outside decide() (e.g. stale camera
+        state) forces us to short-circuit without running the director.
+        """
+        return self._issue(
+            DecisionAction.STAY,
+            self._state.current_camera,
+            reason,
+            utterance_id=None,
+        )
 
     def on_reconnect(self) -> None:
         """Backend/control transport restart.
