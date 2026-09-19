@@ -1,15 +1,20 @@
 """Semantic cue parser. The LLM outputs meaning only; validate() enforces policy.
 
-Field names match the v3 plan (services/worker/semantics is C's lane):
+Field names match the v3 plan (cue_api.semantics is C's lane):
   target_guest_ids, scope, temporal_intent, evidence_text.
 
-NOTE for Claude Code: confirm `client.responses.parse` exists in the installed
-openai SDK. If not, switch to `client.chat.completions.parse` with the same schema.
+Team decision: CUE_PROVIDER=openai is the sole runtime interpreter. Do not
+extend to Ollama or any other provider without a new team decision.
+
+NOTE: confirm `client.responses.parse` exists in the installed openai SDK. If
+not, switch to `client.chat.completions.parse` with the same schema.
 """
+from __future__ import annotations
+
 import json
 import os
 import time
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -18,7 +23,8 @@ from pydantic import BaseModel
 
 load_dotenv()
 
-class Intent(str, Enum):
+
+class Intent(StrEnum):
     INTRODUCE = "INTRODUCE"
     HANDOFF = "HANDOFF"
     RETURN_HOST = "RETURN_HOST"
@@ -26,24 +32,28 @@ class Intent(str, Enum):
     MENTION = "MENTION"
     NONE = "NONE"
 
-class TemporalIntent(str, Enum):
+
+class TemporalIntent(StrEnum):
     NOW = "NOW"
     FUTURE = "FUTURE"
     PAST = "PAST"
     NEGATED = "NEGATED"
     UNCERTAIN = "UNCERTAIN"
 
-class Scope(str, Enum):
+
+class Scope(StrEnum):
     SINGLE = "single"
     GROUP = "group"
     ROLE = "role"
     NONE = "none"
 
-class Action(str, Enum):
+
+class Action(StrEnum):
     SHOW = "SHOW"
     WIDE = "WIDE"
     HOST = "HOST"
     HOLD = "HOLD"
+
 
 class Cue(BaseModel):
     target_guest_ids: list[str]   # roster ids only, never invented names
@@ -52,8 +62,9 @@ class Cue(BaseModel):
     temporal_intent: TemporalIntent
     action: Action
     evidence_text: str            # exact words from the transcript that justify this
-    utterance_id: str = ""        # groups clauses from one continuous utterance (correction detection)
-    created_at: float = 0.0       # producer clock seconds when this cue was minted (staleness)
+    utterance_id: str = ""        # groups clauses in one utterance (correction detection)
+    created_at: float = 0.0       # producer clock seconds; used for staleness
+
 
 SYSTEM = """You interpret a live event host's speech for a camera director.
 Return the MEANING of the latest utterance. You never choose a camera.
@@ -81,17 +92,23 @@ Rules:
   an AI or system are never cues -> HOLD.
 - evidence_text: copy the few exact words that decided it."""
 
-_ROSTER = json.loads((Path(__file__).parent / "roster.json").read_text())
-_client = None
 
-def _roster_text(roster=_ROSTER):
+_ROSTER: dict = json.loads((Path(__file__).parent / "roster.json").read_text())
+_client: OpenAI | None = None
+
+
+def _roster_text(roster: dict | None = None) -> str:
+    r = roster if roster is not None else _ROSTER
     return "\n".join(
         f'- {g["id"]}: {g["name"]}; aliases {g["aliases"]}; role "{g["role"]}"'
-        for g in roster["guests"])
+        for g in r["guests"]
+    )
 
-def validate(cue: Cue, roster=_ROSTER) -> Cue:
+
+def validate(cue: Cue, roster: dict | None = None) -> Cue:
     """Deterministic guard. The model proposes, this disposes."""
-    ids = {g["id"] for g in roster["guests"]}
+    r = roster if roster is not None else _ROSTER
+    ids = {g["id"] for g in r["guests"]}
     cue.target_guest_ids = [s for s in cue.target_guest_ids if s in ids]
     now = cue.temporal_intent == TemporalIntent.NOW
     n = len(cue.target_guest_ids)
@@ -107,25 +124,35 @@ def validate(cue: Cue, roster=_ROSTER) -> Cue:
         cue.scope = Scope.NONE
     return cue
 
-def parse(utterance: str, context: str = "", model: str | None = None):
+
+def parse(utterance: str, context: str = "", model: str | None = None) -> tuple[Cue, float]:
     """Returns (Cue, latency_ms). On any failure returns a safe HOLD."""
     global _client
     _client = _client or OpenAI()
-    model = model or os.environ["CUE_MODEL"]
+    resolved_model = model or os.environ["CUE_MODEL"]
     user = (f"Recent context: {context}\n" if context else "") + f"Latest utterance: {utterance}"
     t0 = time.perf_counter()
     try:
         r = _client.responses.parse(
-            model=model,
-            input=[{"role": "system", "content": SYSTEM.format(roster=_roster_text())},
-                   {"role": "user", "content": user}],
-            text_format=Cue)
+            model=resolved_model,
+            input=[
+                {"role": "system", "content": SYSTEM.format(roster=_roster_text())},
+                {"role": "user", "content": user},
+            ],
+            text_format=Cue,
+        )
         cue = validate(r.output_parsed)
-    except Exception as e:  # noqa: BLE001 - any parser failure must produce a safe HOLD
-        cue = Cue(target_guest_ids=[], scope=Scope.NONE, intent=Intent.NONE,
-                  temporal_intent=TemporalIntent.UNCERTAIN, action=Action.HOLD,
-                  evidence_text=f"ERROR: {type(e).__name__}: {e}"[:200])
+    except Exception as e:  # timeout, refusal, schema error -> safe shot
+        cue = Cue(
+            target_guest_ids=[],
+            scope=Scope.NONE,
+            intent=Intent.NONE,
+            temporal_intent=TemporalIntent.UNCERTAIN,
+            action=Action.HOLD,
+            evidence_text=f"ERROR: {type(e).__name__}: {e}"[:200],
+        )
     return cue, (time.perf_counter() - t0) * 1000
+
 
 if __name__ == "__main__":
     import sys

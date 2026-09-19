@@ -18,3 +18,5 @@ Thumbs.db
 recordings/
 artifacts/
 tests/**/results_*.json
+# C-lane: semantic evaluation results are per-run artifacts, not source.
+scripts/results_*.json

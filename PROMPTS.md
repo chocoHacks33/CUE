@@ -4,17 +4,17 @@ Tip: run `/clear` between milestones so old context does not leak in.
 CLAUDE.md reloads automatically each session.
 
 ## Setup (once)
-"Read CLAUDE.md. Create a Python venv, install requirements.txt, copy
-.env.example to .env and tell me which keys I must fill in. Do not print keys.
-Then run `git init` and make the first commit."
+"Read CLAUDE.md. `cd apps/api`, create a Python venv, run
+`python -m pip install -e ".[dev]"`, copy `.env.example` to `.env` and tell
+me which keys I must fill in. Do not print keys."
 
 ## M1 Semantic brain
-"M1. Check that services/worker/semantics/parser.py matches the installed
+"M1. Check that apps/api/src/cue_api/semantics/parser.py matches the installed
 openai SDK and fix the call if needed.
-Run `python tests/semantics/run_semantic.py --models <A> <B>` with two
-fast models I have access to. Show me the summary table. For every FAIL, tell me
-whether the prompt, the test expectation, or the model is at fault. Change only
-the prompt in SYSTEM. Do not special-case any test sentence."
+Run `python scripts/run_semantic.py --models <A> <B>` with two fast models
+I have access to. Show me the summary table. For every FAIL, tell me whether
+the prompt, the test expectation, or the model is at fault. Change only the
+prompt in SYSTEM. Do not special-case any test sentence."
 
 Gate: 90%+ pass, zero wrong_cuts, p95 latency written down. Commit.
 
@@ -36,20 +36,19 @@ Gate: 5 minutes of switching with no audio glitch. Commit.
 ## M4 Live speech to meaning
 "M4. Backend subscribes to camera A audio, streams it to Deepgram with interim
 results and roster names as keywords. On each finished clause call
-services.worker.semantics.parser.parse and push the Cue plus latency to the
-desk over WebSocket.
-Show transcript and Cue live. No camera control yet."
+cue_api.semantics.parser.parse and push the Cue plus latency to the desk over
+WebSocket. Show transcript and Cue live. No camera control yet."
 
 Gate: say five test sentences aloud in the noisy hall. Log the end to end
 latency from last word to Cue. Commit.
 
 ## M5 Director
-"M5. Add services/api/policy/director.py: pure function
+"M5. Add apps/api/src/cue_api/policy/director.py: pure function
 decide(cue, cameras, state, now, *, role_based=False, role_map=None)
 -> Decision. Rules: min shot 2.5 s, one fast re-cut allowed on same-utterance
 correction, unhealthy camera -> wide, manual HOLD always wins and sets
 hold_until for 5 s, stale cue (>3 s) rejected, identity max age 1.5 s.
-Unit tests in tests/policy/test_director.py first, then wire it to the desk."
+Unit tests in apps/api/tests/test_director.py first, then wire it to the desk."
 
 Gate: 'Sarah later' holds. 'Sarah, join us now' takes B. Commit.
 
