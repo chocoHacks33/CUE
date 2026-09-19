@@ -129,7 +129,7 @@ def test_renderer_shapes_round_trip_through_the_control_socket() -> None:
         pushed, _ = _until(ws, "render.command")
         assert pushed["command"]["decisionId"] == command["decisionId"]
 
-        # APPLIED acknowledgement, as ackToAcknowledgement() shapes it, moves the backend's live camera.
+        # APPLIED acknowledgement, shaped like ackToAcknowledgement(), moves the live camera.
         acknowledgement = {
             "decisionId": command["decisionId"],
             "controlGeneration": command["controlGeneration"],
