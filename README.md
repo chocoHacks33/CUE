@@ -44,9 +44,14 @@ Camera access works on `localhost` or HTTPS. A different laptop cannot use D's `
 
 `CAM-GUEST` is video only. Identifying anyone on it is opt-in and event-scoped:
 references live in memory on D's Mac, are deleted on withdrawal or at event end,
-and an unknown face stays unknown. See [docs/guest-privacy.md](docs/guest-privacy.md),
-[docs/vision-models.md](docs/vision-models.md) and
-[docs/stage-0-1-b-handoff.md](docs/stage-0-1-b-handoff.md).
+and an unknown face stays unknown. See [docs/guest-privacy.md](docs/guest-privacy.md)
+and [docs/vision-models.md](docs/vision-models.md).
+
+Person B's scope is Stage 0, Stage 1 prep and Stage 1 — one document each:
+
+- [docs/person-b-stage-0.md](docs/person-b-stage-0.md) — model weight/licence check, consent roster
+- [docs/person-b-stage-1-prep.md](docs/person-b-stage-1-prep.md) — contracts and cross-language fixtures
+- [docs/person-b-stage-1.md](docs/person-b-stage-1.md) — video-only capture, enrolment/reference module, feed to the Mac
 
 ```bash
 python -m pip install -e "apps/api[dev]"           # core, no OpenCV needed
