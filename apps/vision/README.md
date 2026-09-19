@@ -1,9 +1,13 @@
 # cue-vision
 
-Person B's guest-identity package: face detection, quality gating, calibrated
-matching, local tracking and identity expiry.
+Person B's guest-identity package. Stage 0/1 scope: model provenance, face
+detection, the capture-quality gate and the enrolled reference gallery.
 
 It observes. It never directs — nothing here selects a camera or requests a cut.
+
+Matching, calibration, local tracking, identity expiry and the observation
+pipeline are Stage 2/3 work and live on `codex/b-vision-stage2`, unmerged until
+the Mac runtime gate passes.
 
 ## Design
 
@@ -14,11 +18,9 @@ imports `cv2` lazily so a missing native wheel fails at the point of use with a
 clear message instead of at import time.
 
 ```text
-A's worker --DecodedFrame--> VisionPipeline --Observation--> backend/policy/UI
-                                  |
-                 detector -> quality gate -> embedder -> gallery match
-                                  |
-                       tracker + identity ledger (confirm, expire, invalidate)
+enrolment photo --> detector --> quality gate --> embedder --> backend gallery
+
+A's worker --DecodedFrame--> detector --> quality gate --> [Stage 2: match]
 ```
 
 ## Install
@@ -43,8 +45,8 @@ cue-vision forget --api https://… --secret … --event hackmit-demo --guest-id
 
 ## Status
 
-Every test in `tests/` drives scripted detectors and embedders. They prove the
-policy around the models — abstention, confirmation, expiry, epoch and consent
-invalidation — and prove nothing about recognition accuracy. No model file has
+Every test in `tests/` drives fixtures rather than pixels. They prove the
+quality gate's thresholds, the model registry's refusals and the gallery
+loader's rules, and prove nothing about recognition accuracy. No model file has
 been downloaded and the OpenCV adapters have never executed. See
 `docs/stage-1-b-handoff.md` and `docs/vision-models.md`.

@@ -1,7 +1,11 @@
-"""Person B's guest, consent and visual-observation routes.
+"""Person B's guest, consent and enrolment routes.
 
-Hosted by A's FastAPI app on D's Mac. These routes accept observations and
-consent decisions. They never accept or emit a camera command.
+Hosted by A's FastAPI app on D's Mac. These routes record consent, hold
+enrolment references and serve the worker gallery. They never accept or emit a
+camera command.
+
+Stage 2 adds the observation intake, epoch invalidation and status tallies on
+`codex/b-vision-stage2`; they are deliberately absent here.
 """
 
 from __future__ import annotations
@@ -12,20 +16,15 @@ from collections.abc import Callable
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
-from cue_api.contracts import CameraId
 from cue_api.guests.contracts import (
     GalleryEntry,
     GalleryResponse,
     GuestEnrolmentRequest,
     GuestListResponse,
     GuestRecord,
-    InvalidationRequest,
-    ObservationSnapshot,
     PurgeReceipt,
     ReferenceSubmission,
-    VisualObservation,
 )
-from cue_api.guests.observations import ObservationStore, StaleEpochError
 from cue_api.guests.registry import ConsentError, GuestNotFoundError, GuestRegistry
 from cue_api.settings import Settings
 
@@ -45,7 +44,6 @@ def _default_clock() -> int:
 def build_guest_router(
     settings: Settings,
     registry: GuestRegistry,
-    observations: ObservationStore,
     clock: Callable[[], int] = _default_clock,
 ) -> APIRouter:
     def require_operator(
@@ -133,24 +131,24 @@ def build_guest_router(
             _, deleted = registry.withdraw(event_id=event_id, guest_id=guest_id, now_ms=now_ms)
         except GuestNotFoundError as error:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
-        dropped = observations.drop_guest(event_id=event_id, guest_id=guest_id)
         return PurgeReceipt(
             event_id=event_id,
             guest_ids=[guest_id],
             references_deleted=deleted,
-            observations_dropped=dropped,
+            # Stage 2 wires the live observation store in here, so a withdrawal
+            # also drops the evidence naming this guest.
+            observations_dropped=0,
             purged_at_ms=now_ms,
         )
 
     @router.delete("/guests", response_model=PurgeReceipt)
     def purge_event(event_id: str = EVENT_ID_QUERY) -> PurgeReceipt:
         guest_ids, deleted = registry.purge_event(event_id=event_id)
-        dropped = observations.drop_event(event_id=event_id)
         return PurgeReceipt(
             event_id=event_id,
             guest_ids=guest_ids,
             references_deleted=deleted,
-            observations_dropped=dropped,
+            observations_dropped=0,
             purged_at_ms=clock(),
         )
 
@@ -171,63 +169,5 @@ def build_guest_router(
                 for guest_id, display_name, reference_version, embeddings in entries
             ],
         )
-
-    @router.post(
-        "/vision/observations",
-        response_model=VisualObservation,
-        status_code=status.HTTP_202_ACCEPTED,
-    )
-    def record_observation(observation: VisualObservation) -> VisualObservation:
-        guest_id = observation.subject.guest_id
-        if guest_id is not None and not registry.is_identifiable(observation.event_id, guest_id):
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    f"Guest {guest_id} is not an identifiable consenting guest; "
-                    "refresh the gallery and resubmit without an identity"
-                ),
-            )
-        try:
-            return observations.record(observation)
-        except StaleEpochError as error:
-            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
-
-    @router.get("/vision/observations", response_model=ObservationSnapshot)
-    def read_observations(event_id: str = EVENT_ID_QUERY) -> ObservationSnapshot:
-        return observations.snapshot(
-            event_id=event_id,
-            now_ms=clock(),
-            gallery_version=registry.gallery_version,
-        )
-
-    @router.post("/vision/invalidate", response_model=ObservationSnapshot)
-    def invalidate(payload: InvalidationRequest) -> ObservationSnapshot:
-        observations.invalidate(
-            event_id=payload.event_id,
-            camera_id=payload.camera_id,
-            current_stream_epoch=payload.current_stream_epoch,
-            reason=payload.reason,
-        )
-        return observations.snapshot(
-            event_id=payload.event_id,
-            now_ms=clock(),
-            gallery_version=registry.gallery_version,
-        )
-
-    @router.get("/vision/tallies")
-    def read_tallies(event_id: str = EVENT_ID_QUERY) -> dict[str, object]:
-        """Status counts for B's identity report. Not per-face history."""
-        return {
-            "eventId": event_id,
-            "galleryVersion": registry.gallery_version,
-            "epochs": {
-                camera_id.value: observations.current_epoch(
-                    event_id=event_id,
-                    camera_id=camera_id,
-                )
-                for camera_id in CameraId
-            },
-            "statusCounts": observations.tallies(event_id=event_id),
-        }
 
     return router

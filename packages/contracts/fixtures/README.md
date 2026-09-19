@@ -5,10 +5,10 @@ vocabulary. The same bytes are validated by:
 
 - `packages/contracts/src/vision.test.ts` (rules, on inline equivalents)
 - `apps/web/src/guests/visionContract.test.ts` (observation fixture bytes)
+- `apps/vision/tests/` on `codex/b-vision-stage2` (the pipeline that emits them)
 - `apps/web/src/guests/consentFixtures.test.ts` (consent fixture bytes)
 - `apps/api/tests/test_guest_contracts.py` (Python, pydantic models)
 - `apps/api/tests/test_guest_registry.py` (the registry that enforces consent)
-- `apps/vision/tests/test_observation_contract.py` (the emitting pipeline)
 
 If a field changes, change it here first and let every side fail.
 

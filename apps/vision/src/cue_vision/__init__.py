@@ -1,20 +1,16 @@
-"""CUE guest identity: detection, quality, calibrated matching and expiry.
+"""CUE guest identity: model provenance, capture quality and reference handling.
 
 Person B owns this package. It observes; it never directs. Import the OpenCV
 adapters from `cue_vision.adapters.opencv_models` only where real pixels exist.
+
+Stage 0/1 scope: model files and their checksums, the capture-quality gate, the
+reference gallery, and enrolment. Matching, calibration, tracking, identity
+expiry and the observation pipeline are Stage 2/3 and live on
+`codex/b-vision-stage2` until the Mac runtime gate passes.
 """
 
-from cue_vision.calibration import (
-    NO_CALIBRATION,
-    PROVISIONAL_CALIBRATION,
-    Calibration,
-)
-from cue_vision.gallery import GuestReferences, ReferenceGallery
-from cue_vision.ledger import DEFAULT_IDENTITY_TTL_MS, IdentityLedger
-from cue_vision.matching import MatchDecision, MatchThresholds, match
-from cue_vision.pipeline import Observation, VisionPipeline
-from cue_vision.quality import QualityPolicy, QualityVerdict, assess
-from cue_vision.tracking import LocalTracker
+from cue_vision.gallery import GuestReferences, ReferenceGallery, cosine_similarity, normalise
+from cue_vision.quality import DEFAULT_QUALITY_POLICY, QualityPolicy, QualityVerdict, assess
 from cue_vision.types import (
     CalibrationStatus,
     DecodedFrame,
@@ -25,28 +21,20 @@ from cue_vision.types import (
 from cue_vision.version import PACKAGE_VERSION, PIPELINE_VERSION, VISION_CONTRACT_VERSION
 
 __all__ = [
-    "DEFAULT_IDENTITY_TTL_MS",
-    "NO_CALIBRATION",
+    "DEFAULT_QUALITY_POLICY",
     "PACKAGE_VERSION",
     "PIPELINE_VERSION",
-    "PROVISIONAL_CALIBRATION",
     "VISION_CONTRACT_VERSION",
-    "Calibration",
     "CalibrationStatus",
     "DecodedFrame",
     "FaceDetection",
     "GuestReferences",
-    "IdentityLedger",
-    "LocalTracker",
-    "MatchDecision",
-    "MatchThresholds",
-    "Observation",
     "ObservationStatus",
     "PixelBox",
     "QualityPolicy",
     "QualityVerdict",
     "ReferenceGallery",
-    "VisionPipeline",
     "assess",
-    "match",
+    "cosine_similarity",
+    "normalise",
 ]
