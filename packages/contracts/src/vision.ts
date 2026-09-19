@@ -378,8 +378,16 @@ export function parseGuestRecord(value: unknown): GuestRecord {
   const granted = consent.granted;
   if (typeof granted !== "boolean") throw new Error("consent.granted must be a boolean");
   const withdrawnAtMs = asNullableNumber(consent, "withdrawnAtMs", "consent");
-  if (status === "WITHDRAWN" && (granted || withdrawnAtMs === null)) {
-    throw new Error("A withdrawn guest must record the withdrawal and drop consent");
+  const referenceCount = asNumber(root, "referenceCount", "guest");
+  if (status === "WITHDRAWN") {
+    if (granted || withdrawnAtMs === null) {
+      throw new Error("A withdrawn guest must record the withdrawal and drop consent");
+    }
+    // Withdrawal is a deletion, not a flag. A record that still counts
+    // references is describing data the guest asked us to destroy.
+    if (referenceCount !== 0) {
+      throw new Error("A withdrawn guest must hold no references");
+    }
   }
 
   const purposes = asStringArray(consent, "purposes", "consent");
@@ -409,7 +417,7 @@ export function parseGuestRecord(value: unknown): GuestRecord {
       recordedBy: asString(consent, "recordedBy", "consent"),
     },
     referenceVersion: asNumber(root, "referenceVersion", "guest"),
-    referenceCount: asNumber(root, "referenceCount", "guest"),
+    referenceCount,
     meanReferenceQuality: asNullableNumber(root, "meanReferenceQuality", "guest"),
     storage: "MEMORY_ONLY",
     updatedAtMs: asNumber(root, "updatedAtMs", "guest"),
