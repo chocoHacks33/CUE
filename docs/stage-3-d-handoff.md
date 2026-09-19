@@ -64,5 +64,5 @@ Not run: anything with a real feed. The Stage 3 exit gate in the v3 plan is one 
 
 ## 7. For A and C
 
-- A: `readiness.py` now accepts `"SLATE"` as `current_source` (integration fix). The compositor's `render.reconcile` after a local slate or failover may hit `PENDING_DECISION` if a backend command is outstanding; the compositor logs it and retries on the next local cut. Consider clearing the pending command when the compositor reports a different actual state.
+- A: `readiness.py` accepts `"SLATE"` as `current_source`. On the integrated A Stage 3 branch, a trusted `render.reconcile` invalidates an outstanding command, records it as rejected and advances the revision, so a local slate/failover or reconnect cannot remain stuck behind an unreachable ACK.
 - C: policy cuts arrive at the compositor only as A's `render.command`; C's `plainReason` and transcript span are not on that message. If A adds them to `RenderCommand` the timeline will show them as evidence text.

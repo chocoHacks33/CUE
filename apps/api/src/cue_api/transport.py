@@ -4,7 +4,7 @@ from dataclasses import dataclass
 
 from cue_api.admission import AdmissionStore, CameraBinding
 from cue_api.contracts import CameraId, TransportOutcome
-from cue_api.guests.observations import ObservationStore
+from cue_api.guests.observation_store import ObservationStore
 
 
 @dataclass(frozen=True)

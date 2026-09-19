@@ -126,6 +126,7 @@ export interface CameraBinding {
   displayName: string;
   currentVideoTrackSid: string | null;
   streamEpoch: number;
+  bindingRevision: number;
 }
 
 export type TransportOutcome =

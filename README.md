@@ -82,7 +82,7 @@ Person A's Stage 1 protocol, frame/PCM contracts and physical handoff are in [do
 
 Person A's Stage 2 control, health, ingestion and integration work is documented in [docs/stage-2-a-handoff.md](docs/stage-2-a-handoff.md). A's automated fixture is complete; D's real three-camera Mac acceptance rows remain the system gate.
 
-Person A's Stage 3 reconnect, duplicate-slot, cleanup and state-reconciliation preliminaries are documented in [docs/stage-3-a-prep-handoff.md](docs/stage-3-a-prep-handoff.md). They can be merged after Stage 2; the real three-laptop live sequence on D's Mac remains the Stage 3 gate.
+Person A's complete Stage 3 transport/reconnect integration is documented in [docs/stage-3-a-handoff.md](docs/stage-3-a-handoff.md). The automated implementation is complete; the real three-laptop live sequence on D's Mac remains the Stage 3 system gate.
 
 ## Producer receiver (Person D's Mac)
 

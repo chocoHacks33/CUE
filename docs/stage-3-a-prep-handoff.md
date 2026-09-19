@@ -1,8 +1,10 @@
 # Person A Stage 3 preliminary handoff
 
+This preliminary handoff is superseded by `docs/stage-3-a-handoff.md`.
+
 Branch: `codex/person-a-stage-3-prep`
 
-This branch prepares the reconnect, duplicate-slot, cleanup and reconciliation
+This branch prepared the reconnect, duplicate-slot, cleanup and reconciliation
 boundaries without depending on D's final Stage 2 compositor merge. It is safe
 to merge after Stage 2, but it does **not** pass the Stage 3 system gate by
 itself. The exit gate still requires a genuine three-laptop live sequence on
@@ -74,4 +76,3 @@ Use `docs/results/a-stage3-integration-check.md` after this branch and D's
 Stage 2 work are integrated. A leads fixes; D operates and records results on
 the Mac. Until every required row passes, report: “A Stage 3 preliminaries
 complete; live Stage 3 gate not yet run.”
-

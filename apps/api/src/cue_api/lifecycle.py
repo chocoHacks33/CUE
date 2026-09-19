@@ -7,7 +7,7 @@ from collections.abc import Callable
 from cue_api.admission import AdmissionStore
 from cue_api.contracts import EventEndReceipt
 from cue_api.control import ControlSessionStore, ControlStore
-from cue_api.guests.observations import ObservationStore
+from cue_api.guests.observation_store import ObservationStore
 from cue_api.guests.registry import GuestRegistry
 from cue_api.readiness import ReadinessStore
 

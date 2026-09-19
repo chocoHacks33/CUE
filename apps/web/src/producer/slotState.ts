@@ -25,6 +25,7 @@ export interface SlotState {
   publisherIdentity: string | null;
   publisherName: string | null;
   streamEpoch: number | null;
+  bindingRevision: number | null;
   videoTrackSid: string | null;
   audioTrackSid: string | null;
   /** Track SIDs seen earlier for this camera ID, newest last. Proves a republish changed the SID, not the camera. */
@@ -52,6 +53,7 @@ export function emptySlot(cameraId: CameraId): SlotState {
     publisherIdentity: null,
     publisherName: null,
     streamEpoch: null,
+    bindingRevision: null,
     videoTrackSid: null,
     audioTrackSid: null,
     previousVideoTrackSids: [],
@@ -83,6 +85,12 @@ export type BindingReconcileResult =
   | { kind: "stale"; cameraId: CameraId }
   | { kind: "conflict"; cameraId: CameraId; holder: string };
 
+export interface BindingSnapshotResult {
+  slots: Slots;
+  removedCameraIds: CameraId[];
+  results: BindingReconcileResult[];
+}
+
 /** Apply A's authoritative transport response after a real track event. */
 export function applyAuthoritativeBinding(
   slots: Slots,
@@ -91,12 +99,15 @@ export function applyAuthoritativeBinding(
 ): { slots: Slots; result: BindingReconcileResult } {
   const cameraId = binding.cameraId;
   const slot = slots[cameraId];
-  if (binding.eventId !== eventId || (slot.streamEpoch ?? 0) > binding.streamEpoch) {
+  if (
+    binding.eventId !== eventId ||
+    (slot.bindingRevision ?? -1) > binding.bindingRevision ||
+    (slot.streamEpoch ?? 0) > binding.streamEpoch
+  ) {
     return { slots, result: { kind: "stale", cameraId } };
   }
-  const sameEpoch = slot.streamEpoch === binding.streamEpoch;
+  const sameRevision = slot.bindingRevision === binding.bindingRevision;
   if (
-    sameEpoch &&
     slot.publisherIdentity !== null &&
     slot.publisherIdentity !== binding.participantIdentity
   ) {
@@ -106,11 +117,14 @@ export function applyAuthoritativeBinding(
     };
   }
   if (
-    sameEpoch &&
+    sameRevision &&
     slot.publisherIdentity === binding.participantIdentity &&
     slot.videoTrackSid === binding.currentVideoTrackSid
   ) {
     return { slots, result: { kind: "unchanged", cameraId } };
+  }
+  if (sameRevision && slot.publisherIdentity === binding.participantIdentity) {
+    return { slots, result: { kind: "stale", cameraId } };
   }
 
   const epochAdvanced = slot.streamEpoch !== null && binding.streamEpoch > slot.streamEpoch;
@@ -120,6 +134,7 @@ export function applyAuthoritativeBinding(
     publisherIdentity: binding.participantIdentity,
     publisherName: binding.displayName,
     streamEpoch: binding.streamEpoch,
+    bindingRevision: binding.bindingRevision,
     videoTrackSid: binding.currentVideoTrackSid,
     previousVideoTrackSids,
     videoState: binding.currentVideoTrackSid ? "subscribing" : "publisher-connected",
@@ -128,12 +143,51 @@ export function applyAuthoritativeBinding(
       ...(slot.publisherIdentity && slot.publisherIdentity !== binding.participantIdentity
         ? [slot.publisherIdentity]
         : []),
-    ].filter((identity, index, all) => identity !== binding.participantIdentity && all.indexOf(identity) === index),
+    ].filter(
+      (identity, index, all) =>
+        identity !== binding.participantIdentity && all.indexOf(identity) === index,
+    ),
   };
   return {
     slots: { ...slots, [cameraId]: next },
     result: { kind: "applied", cameraId, epochAdvanced },
   };
+}
+
+/** Replace local ownership with one complete authoritative binding snapshot. */
+export function reconcileAuthoritativeBindings(
+  slots: Slots,
+  bindings: readonly CameraBinding[],
+  eventId: string,
+): BindingSnapshotResult {
+  let next = slots;
+  const results: BindingReconcileResult[] = [];
+  const present = new Set<CameraId>();
+
+  for (const binding of bindings) {
+    if (binding.eventId !== eventId || present.has(binding.cameraId)) continue;
+    present.add(binding.cameraId);
+    const applied = applyAuthoritativeBinding(next, binding, eventId);
+    next = applied.slots;
+    results.push(applied.result);
+  }
+
+  const removedCameraIds: CameraId[] = [];
+  for (const cameraId of CAMERA_IDS) {
+    if (present.has(cameraId)) continue;
+    const slot = next[cameraId];
+    if (slot.publisherIdentity !== null || slot.videoTrackSid !== null) {
+      removedCameraIds.push(cameraId);
+    }
+    next = {
+      ...next,
+      [cameraId]: {
+        ...emptySlot(cameraId),
+        previousVideoTrackSids: remember(slot.previousVideoTrackSids, slot.videoTrackSid),
+      },
+    };
+  }
+  return { slots: next, removedCameraIds, results };
 }
 
 /**
@@ -168,7 +222,11 @@ export function claimSlot(
     return {
       slots: {
         ...slots,
-        [cameraId]: { ...slot, publisherName: name, streamEpoch: metadata.streamEpoch },
+        [cameraId]: {
+          ...slot,
+          publisherName: name,
+          streamEpoch: Math.max(slot.streamEpoch ?? metadata.streamEpoch, metadata.streamEpoch),
+        },
       },
       result: { kind: "already-assigned", cameraId },
     };

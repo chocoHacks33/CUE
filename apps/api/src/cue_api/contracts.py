@@ -152,6 +152,7 @@ class CameraBindingResponse(ContractModel):
     display_name: str
     current_video_track_sid: str | None = None
     stream_epoch: int = Field(ge=1)
+    binding_revision: int = Field(ge=0)
 
 
 class VideoTrackMutationRequest(ContractModel):

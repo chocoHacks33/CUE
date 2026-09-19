@@ -71,6 +71,7 @@ class CameraBinding:
     display_name: str
     current_video_track_sid: str | None = None
     stream_epoch: int = 1
+    binding_revision: int = 0
     has_seen_video_track: bool = False
 
 
@@ -297,6 +298,7 @@ class AdmissionStore:
                 binding,
                 current_video_track_sid=track_sid,
                 stream_epoch=next_epoch,
+                binding_revision=binding.binding_revision + 1,
                 has_seen_video_track=True,
             )
             self._bindings[slot] = updated
@@ -319,7 +321,11 @@ class AdmissionStore:
                 raise AdmissionError(AdmissionCode.NOT_FOUND, "Active binding was not found")
             if binding.current_video_track_sid != track_sid:
                 return binding, False
-            updated = replace(binding, current_video_track_sid=None)
+            updated = replace(
+                binding,
+                current_video_track_sid=None,
+                binding_revision=binding.binding_revision + 1,
+            )
             self._bindings[slot] = updated
             return updated, True
 

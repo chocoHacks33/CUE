@@ -96,10 +96,44 @@ def test_transport_endpoints_advance_epoch_and_ignore_late_detach() -> None:
     )
 
     assert first.json()["binding"]["streamEpoch"] == 1
+    assert first.json()["binding"]["bindingRevision"] == 1
     assert second.json()["outcome"] == "REPUBLISHED"
     assert second.json()["binding"]["streamEpoch"] == 2
+    assert second.json()["binding"]["bindingRevision"] == 2
     assert late.json()["outcome"] == "STALE_DETACH_IGNORED"
     assert late.json()["binding"]["currentVideoTrackSid"] == "TR-second"
+
+
+def test_transport_endpoints_advance_epoch_after_clean_disconnect() -> None:
+    test_client = client()
+    identity = pair_host(test_client)
+    base = {
+        "cameraId": "CAM-HOST",
+        "participantIdentity": identity,
+    }
+    first = test_client.post(
+        "/api/v1/events/demo-event/transport/video-attached",
+        headers=PRODUCER,
+        json={**base, "trackSid": "TR-first"},
+    )
+    detached = test_client.post(
+        "/api/v1/events/demo-event/transport/video-detached",
+        headers=PRODUCER,
+        json={**base, "trackSid": "TR-first"},
+    )
+    reconnected = test_client.post(
+        "/api/v1/events/demo-event/transport/video-attached",
+        headers=PRODUCER,
+        json={**base, "trackSid": "TR-reconnected"},
+    )
+
+    assert first.json()["binding"]["streamEpoch"] == 1
+    assert detached.json()["outcome"] == "DETACHED"
+    assert detached.json()["binding"]["currentVideoTrackSid"] is None
+    assert detached.json()["binding"]["bindingRevision"] == 2
+    assert reconnected.json()["outcome"] == "REPUBLISHED"
+    assert reconnected.json()["binding"]["streamEpoch"] == 2
+    assert reconnected.json()["binding"]["bindingRevision"] == 3
 
 
 def test_end_event_fences_tokens_pairing_guests_control_and_transport() -> None:

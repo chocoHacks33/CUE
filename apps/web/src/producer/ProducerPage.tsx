@@ -1,6 +1,7 @@
 import {
   CAMERA_CONTRACTS,
   CAMERA_IDS,
+  type CameraBinding,
   type CameraId,
   type ObservationSnapshot,
   parseObservationSnapshot,
@@ -21,19 +22,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ProgramPanel } from "../compositor/ProgramPanel";
 import { RecordingTest } from "../recording/RecordingTest";
 import { describeEvidence, type EvidenceLine } from "./evidenceView";
+import { listCameraBindings } from "./pairingApi";
 import { PairingPanel } from "./PairingPanel";
 import { buildReadiness } from "./readiness";
 import { requestReceiverToken } from "./receiverApi";
 import {
+  applyAuthoritativeBinding,
   applyStallCheck,
-  claimSlot,
   clearAudioTrack,
   clearVideoTrack,
   emptySlots,
   frameAgeMs,
   MASTER_AUDIO_CAMERA,
   markFrame,
-  releaseParticipant,
+  reconcileAuthoritativeBindings,
   setAudioPlayback,
   setAudioTrack,
   setVideoTrack,
@@ -41,6 +43,8 @@ import {
   type SlotState,
   type Slots,
 } from "./slotState";
+import { attachVideoTrack, detachVideoTrack, endEvent } from "./transportApi";
+import { CameraTransportSequencer } from "./transportSequencer";
 
 type ReceiverStatus =
   | "idle"
@@ -124,6 +128,7 @@ export function ProducerPage() {
   const [recordWithAudio, setRecordWithAudio] = useState(true);
   const [readiness, setReadiness] = useState<ReceiverReadiness | null>(null);
   const [rendererGeneration, setRendererGeneration] = useState(0);
+  const [eventEnding, setEventEnding] = useState(false);
 
   const roomRef = useRef<Room | null>(null);
   /** Stable for this tab. A second tab is a different renderer and can never ACK for this one. */
@@ -145,6 +150,9 @@ export function ProducerPage() {
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const frameWatchers = useRef(new Map<CameraId, FrameWatcher>());
   const ignoredPublications = useRef(new Set<string>());
+  const transportSequencer = useRef(new CameraTransportSequencer());
+  const bindingMutationVersion = useRef(0);
+  const bindingSnapshotRequest = useRef(0);
 
   const noteAudioPlayback = useCallback((allowed: boolean) => {
     readinessContextRef.current = { ...readinessContextRef.current, audioPlaybackAllowed: allowed };
@@ -268,7 +276,7 @@ export function ProducerPage() {
     [appendLog, stopFrameWatcher, touchSlots],
   );
 
-  const detachVideo = useCallback(
+  const detachVideoMedia = useCallback(
     (cameraId: CameraId) => {
       stopFrameWatcher(cameraId);
       const track = videoTracks.current.get(cameraId);
@@ -278,9 +286,16 @@ export function ProducerPage() {
       }
       const element = videoElements.current.get(cameraId);
       if (element) element.srcObject = null;
+    },
+    [stopFrameWatcher],
+  );
+
+  const detachVideo = useCallback(
+    (cameraId: CameraId) => {
+      detachVideoMedia(cameraId);
       commitSlots((s) => clearVideoTrack(s, cameraId));
     },
-    [commitSlots, stopFrameWatcher],
+    [commitSlots, detachVideoMedia],
   );
 
   const detachAudio = useCallback(() => {
@@ -297,10 +312,58 @@ export function ProducerPage() {
     for (const cameraId of CAMERA_IDS) detachVideo(cameraId);
     detachAudio();
     slotsRef.current = emptySlots();
+    bindingMutationVersion.current += 1;
     setSlots(slotsRef.current);
     setUnassigned({});
     ignoredPublications.current.clear();
   }, [detachAudio, detachVideo]);
+
+  const synchronizeBindings = useCallback(async (): Promise<boolean> => {
+    const secret = producerSecret.trim();
+    if (!secret) throw new Error("Producer secret is required for authoritative camera bindings");
+    const requestId = ++bindingSnapshotRequest.current;
+    const mutationVersion = bindingMutationVersion.current;
+    const bindings = await listCameraBindings(
+      apiBaseUrl,
+      secret,
+      connectedEventRef.current,
+    );
+    if (
+      requestId !== bindingSnapshotRequest.current ||
+      mutationVersion !== bindingMutationVersion.current
+    ) {
+      appendLog("Ignored a binding snapshot superseded by newer transport state");
+      return false;
+    }
+    const previous = slotsRef.current;
+    const snapshot = reconcileAuthoritativeBindings(
+      previous,
+      bindings,
+      connectedEventRef.current,
+    );
+    for (const cameraId of CAMERA_IDS) {
+      const before = previous[cameraId];
+      const after = snapshot.slots[cameraId];
+      if (
+        before.videoTrackSid !== null &&
+        (before.videoTrackSid !== after.videoTrackSid ||
+          before.publisherIdentity !== after.publisherIdentity)
+      ) {
+        detachVideoMedia(cameraId);
+      }
+    }
+    slotsRef.current = snapshot.slots;
+    bindingMutationVersion.current += 1;
+    setSlots(snapshot.slots);
+    appendLog(
+      `Authoritative binding snapshot: ${bindings.length} slot${bindings.length === 1 ? "" : "s"}`,
+    );
+    return true;
+  }, [apiBaseUrl, appendLog, detachVideoMedia, producerSecret]);
+
+  async function refreshBindings(): Promise<void> {
+    if (!(await synchronizeBindings())) await synchronizeBindings();
+  }
 
   const registerVideo = useCallback(
     (cameraId: CameraId, element: HTMLVideoElement | null) => {
@@ -348,44 +411,94 @@ export function ProducerPage() {
     );
   }
 
-  function handleParticipant(participant: RemoteParticipant) {
-    const metadata = parsePublisherMetadata(participant.metadata);
-    const { slots: next, result } = claimSlot(
-      slotsRef.current,
-      participant.identity,
-      participant.name ?? null,
-      metadata,
-      connectedEventRef.current,
-    );
-    slotsRef.current = next;
-    setSlots(next);
-
-    switch (result.kind) {
-      case "assigned":
-        appendLog(
-          `${result.cameraId} bound to ${participant.identity} (stream epoch ${metadata?.streamEpoch ?? "?"})`,
+  async function handleParticipant(
+    participant: RemoteParticipant,
+    refreshSnapshot = true,
+  ): Promise<void> {
+    if (refreshSnapshot) {
+      try {
+        await refreshBindings();
+      } catch (error) {
+        const reason = `binding check failed: ${error instanceof Error ? error.message : String(error)}`;
+        setUnassigned((previous) => ({ ...previous, [participant.identity]: reason }));
+        appendLog(`Unassigned ${participant.identity}: ${reason}`);
+        participant.trackPublications.forEach((publication) =>
+          (publication as RemoteTrackPublication).setSubscribed(false),
         );
-        setUnassigned((previous) => {
-          const { [participant.identity]: _dropped, ...rest } = previous;
-          return rest;
-        });
-        break;
-      case "conflict":
-        appendLog(
-          `CONFLICT: ${participant.identity} also claims ${result.cameraId}; keeping ${result.holder}`,
-        );
-        break;
-      case "unassigned":
-        setUnassigned((previous) => ({ ...previous, [participant.identity]: result.reason }));
-        appendLog(`Unassigned ${participant.identity}: ${result.reason}`);
-        break;
-      case "already-assigned":
-        break;
+        return;
+      }
     }
 
+    const metadata = parsePublisherMetadata(participant.metadata);
+    let reason: string | null = null;
+    if (!metadata) {
+      reason = "missing or invalid server metadata";
+    } else if (metadata.eventId !== connectedEventRef.current) {
+      reason = `metadata event "${metadata.eventId}" does not match "${connectedEventRef.current}"`;
+    } else {
+      const holder = slotsRef.current[metadata.cameraId].publisherIdentity;
+      if (holder !== participant.identity) {
+        reason = holder
+          ? `${metadata.cameraId} belongs to ${holder}, not this participant`
+          : `${metadata.cameraId} has no approved binding`;
+      }
+    }
+
+    if (reason) {
+      setUnassigned((previous) => ({ ...previous, [participant.identity]: reason }));
+      appendLog(`Unassigned ${participant.identity}: ${reason}`);
+    } else {
+      setUnassigned((previous) => {
+        const { [participant.identity]: _dropped, ...rest } = previous;
+        return rest;
+      });
+      appendLog(
+        `${metadata?.cameraId}: verified ${participant.identity} against the authoritative binding`,
+      );
+    }
     participant.trackPublications.forEach((publication) =>
       evaluatePublication(publication as RemoteTrackPublication, participant),
     );
+  }
+
+  function applyTransportBinding(binding: CameraBinding): boolean {
+    const reconciled = applyAuthoritativeBinding(
+      slotsRef.current,
+      binding,
+      connectedEventRef.current,
+    );
+    if (reconciled.result.kind === "stale") {
+      appendLog(`${binding.cameraId}: ignored stale transport response at epoch ${binding.streamEpoch}`);
+      return false;
+    }
+    if (reconciled.result.kind === "conflict") {
+      appendLog(
+        `CONFLICT: backend returned ${binding.participantIdentity} for ${binding.cameraId}; ` +
+          `local authoritative holder is ${reconciled.result.holder}`,
+      );
+      return false;
+    }
+    slotsRef.current = reconciled.slots;
+    bindingMutationVersion.current += 1;
+    setSlots(reconciled.slots);
+    return true;
+  }
+
+  async function reportVideoDetach(
+    cameraId: CameraId,
+    participantIdentity: string,
+    trackSid: string,
+  ): Promise<void> {
+    const mutation = await detachVideoTrack(
+      apiBaseUrl,
+      producerSecret.trim(),
+      connectedEventRef.current,
+      cameraId,
+      participantIdentity,
+      trackSid,
+    );
+    applyTransportBinding(mutation.binding);
+    appendLog(`${cameraId}: ${mutation.outcome} for video track ${trackSid}`);
   }
 
   function onTrackSubscribed(
@@ -403,16 +516,43 @@ export function ProducerPage() {
 
     if (track.kind === Track.Kind.Video) {
       const videoTrack = track as RemoteVideoTrack;
-      const previous = videoTracks.current.get(cameraId);
-      if (previous && previous !== videoTrack) previous.detach();
-      videoTracks.current.set(cameraId, videoTrack);
-      const element = videoElements.current.get(cameraId);
-      if (element) {
-        videoTrack.attach(element);
-        watchFrames(element, cameraId);
-      }
-      commitSlots((s) => setVideoTrack(s, cameraId, publication.trackSid));
-      appendLog(`${cameraId}: video track ${publication.trackSid} attached`);
+      void transportSequencer.current
+        .enqueue(cameraId, async () => {
+          const mutation = await attachVideoTrack(
+            apiBaseUrl,
+            producerSecret.trim(),
+            connectedEventRef.current,
+            cameraId,
+            participant.identity,
+            publication.trackSid,
+          );
+          if (
+            mutation.binding.currentVideoTrackSid !== publication.trackSid ||
+            !applyTransportBinding(mutation.binding)
+          ) {
+            publication.setSubscribed(false);
+            return;
+          }
+          const previous = videoTracks.current.get(cameraId);
+          if (previous && previous !== videoTrack) previous.detach();
+          videoTracks.current.set(cameraId, videoTrack);
+          const element = videoElements.current.get(cameraId);
+          if (element) {
+            videoTrack.attach(element);
+            watchFrames(element, cameraId);
+          }
+          commitSlots((s) => setVideoTrack(s, cameraId, publication.trackSid));
+          appendLog(
+            `${cameraId}: ${mutation.outcome} ${publication.trackSid} at epoch ${mutation.binding.streamEpoch}`,
+          );
+        })
+        .catch((error) => {
+          publication.setSubscribed(false);
+          appendLog(
+            `${cameraId}: refused video ${publication.trackSid}; ` +
+              `${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
       return;
     }
 
@@ -445,34 +585,95 @@ export function ProducerPage() {
       }
       return;
     }
+    const metadata = parsePublisherMetadata(participant.metadata);
     for (const [cameraId, known] of videoTracks.current) {
       if (known === track) {
         detachVideo(cameraId);
         appendLog(`${cameraId}: video track ${publication.trackSid} unsubscribed (${participant.identity})`);
       }
     }
+    if (metadata?.eventId === connectedEventRef.current) {
+      void transportSequencer.current
+        .enqueue(metadata.cameraId, () =>
+          reportVideoDetach(metadata.cameraId, participant.identity, publication.trackSid),
+        )
+        .catch((error) =>
+          appendLog(
+            `${metadata.cameraId}: detach report failed for ${publication.trackSid}; ` +
+              `${error instanceof Error ? error.message : String(error)}`,
+          ),
+        );
+    }
   }
 
   function onParticipantDisconnected(participant: RemoteParticipant) {
     for (const cameraId of CAMERA_IDS) {
-      if (slotsRef.current[cameraId].publisherIdentity === participant.identity) {
+      const slot = slotsRef.current[cameraId];
+      if (slot.publisherIdentity === participant.identity) {
+        if (slot.videoTrackSid) {
+          void transportSequencer.current
+            .enqueue(cameraId, () =>
+              reportVideoDetach(cameraId, participant.identity, slot.videoTrackSid as string),
+            )
+            .catch((error) =>
+              appendLog(
+                `${cameraId}: disconnect report failed; ` +
+                  `${error instanceof Error ? error.message : String(error)}`,
+              ),
+            );
+        }
         detachVideo(cameraId);
         if (cameraId === MASTER_AUDIO_CAMERA) detachAudio();
         appendLog(`${cameraId}: publisher ${participant.identity} left; slot keeps its ID and waits`);
       }
     }
-    commitSlots((s) => releaseParticipant(s, participant.identity));
     setUnassigned((previous) => {
       const { [participant.identity]: _dropped, ...rest } = previous;
       return rest;
     });
   }
 
+  const reportCurrentDetaches = useCallback(async () => {
+    const secret = producerSecret.trim();
+    if (!secret) return;
+    const event = connectedEventRef.current;
+    const active = CAMERA_IDS.flatMap((cameraId) => {
+      const slot = slotsRef.current[cameraId];
+      return slot.publisherIdentity && slot.videoTrackSid
+        ? [{ cameraId, participantIdentity: slot.publisherIdentity, trackSid: slot.videoTrackSid }]
+        : [];
+    });
+    const results = await Promise.allSettled(
+      active.map(({ cameraId, participantIdentity, trackSid }) =>
+        transportSequencer.current.enqueue(cameraId, () =>
+          detachVideoTrack(
+            apiBaseUrl,
+            secret,
+            event,
+            cameraId,
+            participantIdentity,
+            trackSid,
+          ),
+        ),
+      ),
+    );
+    results.forEach((result, index) => {
+      if (result.status === "rejected") {
+        appendLog(
+          `${active[index].cameraId}: final detach report failed; ` +
+            `${result.reason instanceof Error ? result.reason.message : String(result.reason)}`,
+        );
+      }
+    });
+    await transportSequencer.current.drain();
+  }, [apiBaseUrl, appendLog, producerSecret]);
+
   const disconnect = useCallback(
     async (announce = true) => {
       const room = roomRef.current;
       roomRef.current = null;
       if (room) {
+        await reportCurrentDetaches();
         room.removeAllListeners();
         await room.disconnect();
       }
@@ -487,7 +688,7 @@ export function ProducerPage() {
         appendLog("Disconnected by operator");
       }
     },
-    [appendLog, resetSlots],
+    [appendLog, reportCurrentDetaches, resetSlots],
   );
 
   useEffect(() => {
@@ -498,10 +699,13 @@ export function ProducerPage() {
 
   async function connect() {
     const secret = bootstrapSecret.trim();
+    const transportSecret = producerSecret.trim();
     const name = displayName.trim();
-    if (!secret || !eventId || !name) {
+    if (!secret || !transportSecret || !eventId || !name) {
       setStatus("error");
-      setDetail("API URL, event ID, display name and Stage 0 secret are required.");
+      setDetail(
+        "API URL, event ID, display name, Stage 0 secret and producer secret are required.",
+      );
       return;
     }
 
@@ -517,19 +721,22 @@ export function ProducerPage() {
         receiverRole: "DIRECTOR",
       });
       connectedEventRef.current = eventId;
+      await refreshBindings();
 
       room = new Room({ adaptiveStream: false, dynacast: false });
       roomRef.current = room;
       room
         .on(RoomEvent.ParticipantConnected, (participant) => {
           appendLog(`Participant joined: ${participant.identity}`);
-          handleParticipant(participant);
+          void handleParticipant(participant);
         })
         .on(RoomEvent.ParticipantDisconnected, onParticipantDisconnected)
         .on(RoomEvent.ParticipantMetadataChanged, (_metadata, participant) => {
-          if (participant instanceof RemoteParticipant) handleParticipant(participant);
+          if (participant instanceof RemoteParticipant) void handleParticipant(participant);
         })
-        .on(RoomEvent.TrackPublished, evaluatePublication)
+        .on(RoomEvent.TrackPublished, (_publication, participant) => {
+          void handleParticipant(participant);
+        })
         .on(RoomEvent.TrackUnpublished, (publication, participant) => {
           appendLog(`${participant.identity} unpublished ${publication.source} ${publication.trackSid}`);
         })
@@ -559,11 +766,24 @@ export function ProducerPage() {
         })
         .on(RoomEvent.Reconnected, () => {
           setStatus("connected");
-          setDetail("Reconnected. Re-checking bound publishers.");
-          roomRef.current?.remoteParticipants.forEach((participant) => handleParticipant(participant));
+          setDetail("Reconnected. Reconciling authoritative bindings and publishers.");
+          void (async () => {
+            try {
+              await refreshBindings();
+              roomRef.current?.remoteParticipants.forEach((participant) => {
+                void handleParticipant(participant, false);
+              });
+            } catch (error) {
+              setDetail(
+                `Media reconnected but binding reconciliation failed: ` +
+                  `${error instanceof Error ? error.message : String(error)}`,
+              );
+            }
+          })();
         })
         .on(RoomEvent.ConnectionStateChanged, (state) => appendLog(`Connection state: ${state}`))
         .on(RoomEvent.Disconnected, (reason) => {
+          void reportCurrentDetaches();
           setStatus("disconnected");
           setDetail(
             `Disconnected from LiveKit${reason !== undefined ? ` (reason ${String(reason)})` : ""}.`,
@@ -589,7 +809,10 @@ export function ProducerPage() {
       setLocalPublications(room.localParticipant.trackPublications.size);
       appendLog(`Connected to ${credential.roomName} as ${room.localParticipant.identity} (subscribe-only)`);
 
-      room.remoteParticipants.forEach((participant) => handleParticipant(participant));
+      await refreshBindings();
+      room.remoteParticipants.forEach((participant) => {
+        void handleParticipant(participant, false);
+      });
 
       try {
         await room.startAudio();
@@ -599,7 +822,7 @@ export function ProducerPage() {
       noteAudioPlayback(room.canPlaybackAudio);
 
       setStatus("connected");
-      setDetail("Connected subscribe-only. Tiles bind to server metadata, not join order.");
+      setDetail("Connected subscribe-only. Tiles follow backend-approved bindings and track epochs.");
     } catch (error) {
       if (room) {
         room.removeAllListeners();
@@ -621,6 +844,37 @@ export function ProducerPage() {
     }
     noteAudioPlayback(room.canPlaybackAudio);
     commitSlots((s) => setAudioPlayback(s, room.canPlaybackAudio));
+  }
+
+  async function finishEvent() {
+    const secret = producerSecret.trim();
+    if (!secret || eventEnding) return;
+    if (
+      !window.confirm(
+        `End ${eventId}? This disconnects the receiver and deletes pairing, identity and live event state.`,
+      )
+    ) {
+      return;
+    }
+    setEventEnding(true);
+    setDetail("Stopping media before the event cleanup…");
+    try {
+      await disconnect(false);
+      const receipt = await endEvent(apiBaseUrl, secret, eventId);
+      setEvidence(null);
+      setStatus("idle");
+      setDetail(
+        `Event ended. Deleted ${receipt.bindingsDeleted} binding(s), ` +
+          `${receipt.referencesDeleted} identity reference(s), and revoked ` +
+          `${receipt.controlSessionsRevoked} control session(s).`,
+      );
+      appendLog(`Event ${eventId} ended and its in-memory state was cleaned up`);
+    } catch (error) {
+      setStatus("error");
+      setDetail(`Event cleanup failed: ${error instanceof Error ? error.message : String(error)}`);
+    } finally {
+      setEventEnding(false);
+    }
   }
 
   const getSourceElement = useCallback(
@@ -649,6 +903,7 @@ export function ProducerPage() {
   }, [recordSlot, recordWithAudio]);
 
   const controlsLocked =
+    eventEnding ||
     status === "requesting-token" ||
     status === "connecting" ||
     status === "connected" ||
@@ -660,8 +915,8 @@ export function ProducerPage() {
   return (
     <main className="shell">
       <header className="hero">
-        <p className="eyebrow">CUE · STAGE 0 · PERSON D</p>
-        <h1>Mac receiver</h1>
+        <p className="eyebrow">CUE · STAGE 3 · PERSON A + D</p>
+        <h1>Authoritative Mac director</h1>
         <p>
           Subscribe-only director desk. Three fixed slots bind to server-labelled publishers. This
           Mac publishes no camera and no microphone.
@@ -718,6 +973,7 @@ export function ProducerPage() {
               <input
                 type="password"
                 value={producerSecret}
+                disabled={controlsLocked || eventEnding}
                 autoComplete="off"
                 onChange={(event) => setProducerSecret(event.target.value)}
               />
@@ -739,6 +995,14 @@ export function ProducerPage() {
                 disabled={status === "idle"}
               >
                 Disconnect
+              </button>
+              <button
+                type="button"
+                className="danger"
+                onClick={() => void finishEvent()}
+                disabled={!producerSecret.trim() || eventEnding}
+              >
+                {eventEnding ? "Ending event…" : "End event + delete live state"}
               </button>
             </div>
 
@@ -1004,6 +1268,8 @@ function SlotTile({ slot, now, registerVideo, evidence }: SlotTileProps) {
         </dd>
         <dt>Stream epoch</dt>
         <dd>{slot.streamEpoch ?? "none"}</dd>
+        <dt>Binding revision</dt>
+        <dd>{slot.bindingRevision ?? "none"}</dd>
         <dt>Video SID</dt>
         <dd>{slot.videoTrackSid ?? "none"}</dd>
         {slot.previousVideoTrackSids.length > 0 && (

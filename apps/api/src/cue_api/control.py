@@ -395,10 +395,12 @@ class ControlStore:
             if event.mode is ControlMode.ENDED:
                 raise ControlError("EVENT_ENDED", "an ended event cannot be reconciled")
             if event.pending is not None:
-                raise ControlError(
-                    "PENDING_DECISION",
-                    "resolve or invalidate the pending render before reconciliation",
+                self._metrics.acknowledged(
+                    event.pending.decision_id,
+                    RenderStatus.REJECTED,
                 )
+                event.pending = None
+                event.mode_revision += 1
             event.live_camera_id = report.actual_camera_id
             event.live_stream_epoch = report.actual_stream_epoch
             return self._snapshot(event)
