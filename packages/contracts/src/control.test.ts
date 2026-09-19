@@ -19,6 +19,7 @@ const command = {
   controlGeneration: "generation-1",
   decisionSequence: 11,
   modeRevision: 4,
+  target: "CAMERA" as const,
   cameraId: "CAM-GUEST" as const,
   streamEpoch: 3,
   reasonCode: "FIXTURE_TAKE",
@@ -43,5 +44,11 @@ describe("Stage 2 control contracts", () => {
     expect(isControlSnapshot({ ...state, liveCameraId: "CAM-UNKNOWN" })).toBe(false);
     expect(isRenderCommand({ ...command, expiresAtMs: command.createdAtMs })).toBe(false);
   });
-});
 
+  it("accepts only a targetless SLATE command", () => {
+    expect(
+      isRenderCommand({ ...command, target: "SLATE", cameraId: null, streamEpoch: null }),
+    ).toBe(true);
+    expect(isRenderCommand({ ...command, target: "SLATE" })).toBe(false);
+  });
+});

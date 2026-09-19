@@ -1,4 +1,5 @@
-from cue_api.camera_health import CameraHealthTracker
+from cue_api.camera_health import CameraHealthRegistry, CameraHealthTracker
+from cue_api.contracts import CameraId
 
 
 def test_health_keeps_transport_and_visual_quality_separate() -> None:
@@ -57,3 +58,24 @@ def test_duplicate_frame_sequence_does_not_fake_progress() -> None:
     assert tracker.observe_frame(7, 100) is True
     assert tracker.observe_frame(7, 900) is False
     assert tracker.snapshot(1_101).stalled is True
+
+
+def test_new_epoch_resets_health_and_old_epoch_cannot_restore_it() -> None:
+    registry = CameraHealthRegistry()
+    values = {
+        "connected": True,
+        "publishing": True,
+        "receiving": True,
+        "renderable": True,
+        "visually_usable": True,
+    }
+    assert registry.update_transport(CameraId.GUEST, 2, **values) is True
+    assert registry.observe_frame(CameraId.GUEST, 2, 10, 100) is True
+    assert registry.snapshot(CameraId.GUEST, 100).health.renderable is True
+
+    assert registry.activate_epoch(CameraId.GUEST, 3) is True
+    current = registry.snapshot(CameraId.GUEST, 200)
+    assert current.stream_epoch == 3
+    assert current.health.connected is False
+    assert registry.observe_frame(CameraId.GUEST, 2, 11, 210) is False
+    assert registry.snapshot(CameraId.GUEST, 210).stream_epoch == 3

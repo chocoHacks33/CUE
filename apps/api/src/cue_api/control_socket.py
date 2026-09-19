@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from collections import defaultdict
 from collections.abc import Callable
 
@@ -9,6 +10,7 @@ from pydantic import ValidationError
 
 from cue_api.control import ControlError, ControlSessionStore, ControlStore
 from cue_api.control_contracts import (
+    ControlLatencyMetrics,
     ControlMutationResponse,
     ControlRole,
     ControlSessionRequest,
@@ -17,7 +19,9 @@ from cue_api.control_contracts import (
     ManualTakeRequest,
     ModeCommandRequest,
     RenderAckRequest,
+    RenderReconcileRequest,
 )
+from cue_api.readiness import ReadinessError, ReadinessStore, ReceiverReadiness
 
 
 class ControlHub:
@@ -63,6 +67,7 @@ def build_control_router(
     store: ControlStore,
     sessions: ControlSessionStore,
     hub: ControlHub,
+    readiness: ReadinessStore,
     require_producer: Callable[[str | None], None],
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/events/{event_id}", tags=["control"])
@@ -84,6 +89,26 @@ def build_control_router(
     ) -> ControlSnapshot:
         require_producer(x_cue_producer_secret)
         return store.snapshot(event_id)
+
+    @router.get("/control-metrics", response_model=ControlLatencyMetrics)
+    async def control_metrics(
+        event_id: str,
+        x_cue_producer_secret: str | None = Header(default=None),
+    ) -> ControlLatencyMetrics:
+        require_producer(x_cue_producer_secret)
+        store.snapshot(event_id)
+        return store.latency_metrics(event_id)
+
+    @router.get("/readiness", response_model=ReceiverReadiness)
+    async def receiver_readiness(
+        event_id: str,
+        x_cue_producer_secret: str | None = Header(default=None),
+    ) -> ReceiverReadiness:
+        require_producer(x_cue_producer_secret)
+        report = readiness.current(event_id)
+        if report is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No readiness report")
+        return report
 
     @router.post("/mode", response_model=ControlMutationResponse)
     async def set_mode(
@@ -147,6 +172,7 @@ def build_control_websocket(
     store: ControlStore,
     sessions: ControlSessionStore,
     hub: ControlHub,
+    readiness: ReadinessStore,
 ):
     async def control_socket(websocket: WebSocket, event_id: str) -> None:
         await websocket.accept()
@@ -182,7 +208,11 @@ def build_control_websocket(
                 if message_type == "control.ping":
                     await websocket.send_json({"type": "control.pong"})
                     continue
-                if message_type != "render.ack":
+                if message_type not in (
+                    "render.ack",
+                    "render.reconcile",
+                    "receiver.readiness",
+                ):
                     await websocket.send_json({"type": "control.error", "code": "UNKNOWN_MESSAGE"})
                     continue
                 if role is not ControlRole.DIRECTOR:
@@ -191,14 +221,46 @@ def build_control_websocket(
                     )
                     continue
                 try:
-                    acknowledgement = RenderAckRequest.model_validate(message.get("ack"))
-                    state = store.acknowledge(event_id, acknowledgement)
+                    if message_type == "render.ack":
+                        acknowledgement = RenderAckRequest.model_validate(message.get("ack"))
+                        state = store.acknowledge(event_id, acknowledgement)
+                    elif message_type == "render.reconcile":
+                        report = RenderReconcileRequest.model_validate(message.get("report"))
+                        state = store.reconcile(event_id, report)
+                    else:
+                        readiness_report = ReceiverReadiness.model_validate(
+                            message.get("readiness")
+                        )
+                        readiness.ingest(
+                            event_id,
+                            readiness_report,
+                            received_at_ms=round(time.monotonic() * 1000),
+                        )
+                        await hub.broadcast(
+                            event_id,
+                            {
+                                "type": "receiver.readiness",
+                                "readiness": readiness_report.model_dump(
+                                    mode="json", by_alias=True
+                                ),
+                            },
+                        )
+                        continue
                 except ValidationError as error:
                     await websocket.send_json(
-                        {"type": "control.error", "code": "INVALID_ACK", "message": str(error)}
+                        {
+                            "type": "control.error",
+                            "code": "INVALID_CONTROL_MESSAGE",
+                            "message": str(error),
+                        }
                     )
                     continue
                 except ControlError as error:
+                    await websocket.send_json(
+                        {"type": "control.error", "code": error.code, "message": str(error)}
+                    )
+                    continue
+                except ReadinessError as error:
                     await websocket.send_json(
                         {"type": "control.error", "code": error.code, "message": str(error)}
                     )

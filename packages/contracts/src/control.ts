@@ -1,4 +1,5 @@
 import { isCameraId, type CameraId } from "./index";
+import type { ReceiverReadiness } from "./readiness";
 
 export const CONTROL_MODES = [
   "SETUP",
@@ -13,6 +14,13 @@ export type ControlMode = (typeof CONTROL_MODES)[number];
 
 export type ControlRole = "DIRECTOR" | "OBSERVER";
 export type RenderStatus = "APPLIED" | "REJECTED" | "FAILED";
+export type RenderTarget = "CAMERA" | "SLATE";
+
+export interface ControlSessionResponse {
+  token: string;
+  role: ControlRole;
+  expiresInSeconds: number;
+}
 
 export interface ControlSnapshot {
   eventId: string;
@@ -31,8 +39,9 @@ export interface RenderCommand {
   controlGeneration: string;
   decisionSequence: number;
   modeRevision: number;
-  cameraId: CameraId;
-  streamEpoch: number;
+  target: RenderTarget;
+  cameraId: CameraId | null;
+  streamEpoch: number | null;
   reasonCode: string;
   createdAtMs: number;
   expiresAtMs: number;
@@ -43,16 +52,40 @@ export interface RenderAcknowledgement {
   controlGeneration: string;
   decisionSequence: number;
   status: RenderStatus;
+  actualTarget: RenderTarget;
   actualCameraId: CameraId | null;
   actualStreamEpoch: number | null;
   appliedAtMs: number;
   detail?: string | null;
 }
 
+export interface RenderReconciliation {
+  controlGeneration: string;
+  actualTarget: RenderTarget;
+  actualCameraId: CameraId | null;
+  actualStreamEpoch: number | null;
+  reportedAtMs: number;
+}
+
+export interface ControlMutationResponse {
+  state: ControlSnapshot;
+  renderCommand: RenderCommand | null;
+}
+
+export interface ControlLatencyMetrics {
+  appliedCount: number;
+  rejectedCount: number;
+  outstandingCount: number;
+  p50Ms: number | null;
+  p95Ms: number | null;
+  maximumMs: number | null;
+}
+
 export type ControlServerMessage =
   | { type: "control.authenticated"; role: ControlRole; eventId: string }
   | { type: "control.state"; state: ControlSnapshot }
   | { type: "render.command"; command: RenderCommand }
+  | { type: "receiver.readiness"; readiness: ReceiverReadiness }
   | { type: "control.pong" }
   | { type: "control.error"; code: string; message?: string };
 
@@ -82,21 +115,25 @@ export function isControlSnapshot(value: unknown): value is ControlSnapshot {
 
 export function isRenderCommand(value: unknown): value is RenderCommand {
   if (!isRecord(value)) return false;
-  return (
+  const common =
     typeof value.decisionId === "string" &&
     typeof value.eventId === "string" &&
     typeof value.controlGeneration === "string" &&
     isNonNegativeInteger(value.decisionSequence) &&
     value.decisionSequence >= 1 &&
     isNonNegativeInteger(value.modeRevision) &&
-    typeof value.cameraId === "string" &&
-    isCameraId(value.cameraId) &&
-    isNonNegativeInteger(value.streamEpoch) &&
-    value.streamEpoch >= 1 &&
+    (value.target === "CAMERA" || value.target === "SLATE") &&
     typeof value.reasonCode === "string" &&
     isNonNegativeInteger(value.createdAtMs) &&
     isNonNegativeInteger(value.expiresAtMs) &&
-    value.expiresAtMs > value.createdAtMs
+    value.expiresAtMs > value.createdAtMs;
+  if (!common) return false;
+  if (value.target === "SLATE") return value.cameraId === null && value.streamEpoch === null;
+  return (
+    typeof value.cameraId === "string" &&
+    isCameraId(value.cameraId) &&
+    isNonNegativeInteger(value.streamEpoch) &&
+    value.streamEpoch >= 1
   );
 }
 
@@ -112,4 +149,3 @@ export function commandIsCurrent(
     command.expiresAtMs >= nowMs
   );
 }
-

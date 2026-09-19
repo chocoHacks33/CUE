@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass
+
+from cue_api.contracts import CAMERA_CONTRACTS, CameraId
 
 
 @dataclass(frozen=True)
@@ -15,6 +18,13 @@ class CameraHealth:
     recovering: bool
     last_frame_age_ms: int | None
     warnings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CameraHealthReport:
+    camera_id: CameraId
+    stream_epoch: int
+    health: CameraHealth
 
 
 class CameraHealthTracker:
@@ -90,3 +100,74 @@ class CameraHealthTracker:
             warnings=self._warnings,
         )
 
+
+class CameraHealthRegistry:
+    """Event-local health keyed by stable camera ID and current stream epoch."""
+
+    def __init__(self) -> None:
+        self._trackers = {camera_id: CameraHealthTracker() for camera_id in CAMERA_CONTRACTS}
+        self._epochs = {camera_id: 0 for camera_id in CAMERA_CONTRACTS}
+        self._lock = threading.RLock()
+
+    def activate_epoch(self, camera_id: CameraId, stream_epoch: int) -> bool:
+        if stream_epoch < 1:
+            raise ValueError("stream_epoch must be positive")
+        with self._lock:
+            if stream_epoch < self._epochs[camera_id]:
+                return False
+            if stream_epoch > self._epochs[camera_id]:
+                self._epochs[camera_id] = stream_epoch
+                self._trackers[camera_id] = CameraHealthTracker()
+            return True
+
+    def update_transport(
+        self,
+        camera_id: CameraId,
+        stream_epoch: int,
+        *,
+        connected: bool,
+        publishing: bool,
+        receiving: bool,
+        renderable: bool,
+        visually_usable: bool,
+        warnings: tuple[str, ...] = (),
+    ) -> bool:
+        with self._lock:
+            if not self.activate_epoch(camera_id, stream_epoch):
+                return False
+            self._trackers[camera_id].update_transport(
+                connected=connected,
+                publishing=publishing,
+                receiving=receiving,
+                renderable=renderable,
+                visually_usable=visually_usable,
+                warnings=warnings,
+            )
+            return True
+
+    def observe_frame(
+        self,
+        camera_id: CameraId,
+        stream_epoch: int,
+        sequence: int,
+        now_ms: int,
+    ) -> bool:
+        with self._lock:
+            if not self.activate_epoch(camera_id, stream_epoch):
+                return False
+            return self._trackers[camera_id].observe_frame(sequence, now_ms)
+
+    def snapshot(self, camera_id: CameraId, now_ms: int) -> CameraHealthReport:
+        with self._lock:
+            return CameraHealthReport(
+                camera_id=camera_id,
+                stream_epoch=self._epochs[camera_id],
+                health=self._trackers[camera_id].snapshot(now_ms),
+            )
+
+    def current_epoch(self, camera_id: CameraId) -> int:
+        with self._lock:
+            return self._epochs[camera_id]
+
+    def snapshot_all(self, now_ms: int) -> tuple[CameraHealthReport, ...]:
+        return tuple(self.snapshot(camera_id, now_ms) for camera_id in CAMERA_CONTRACTS)

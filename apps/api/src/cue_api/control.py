@@ -8,14 +8,18 @@ from dataclasses import dataclass, field
 
 from cue_api.contracts import CameraId
 from cue_api.control_contracts import (
+    ControlLatencyMetrics,
     ControlMode,
     ControlMutationResponse,
     ControlRole,
     ControlSnapshot,
     RenderAckRequest,
     RenderCommand,
+    RenderReconcileRequest,
     RenderStatus,
+    RenderTarget,
 )
+from cue_api.control_metrics import ControlLatencyTracker
 
 
 class ControlError(RuntimeError):
@@ -52,11 +56,17 @@ class ControlStore:
     physically verified.
     """
 
-    def __init__(self, *, command_ttl_ms: int = 2_000) -> None:
+    def __init__(
+        self,
+        *,
+        command_ttl_ms: int = 2_000,
+        metrics: ControlLatencyTracker | None = None,
+    ) -> None:
         self._generation = secrets.token_hex(12)
         self._command_ttl_ms = command_ttl_ms
         self._events: dict[str, _EventControl] = {}
         self._lock = threading.RLock()
+        self._metrics = metrics or ControlLatencyTracker()
 
     def _event(self, event_id: str) -> _EventControl:
         return self._events.setdefault(
@@ -80,6 +90,16 @@ class ControlStore:
     def snapshot(self, event_id: str) -> ControlSnapshot:
         with self._lock:
             return self._snapshot(self._event(event_id))
+
+    def latency_metrics(self, event_id: str) -> ControlLatencyMetrics:
+        return self._metrics.snapshot(event_id)
+
+    def _expire_pending(self, event: _EventControl, now_ms: int) -> None:
+        command = event.pending
+        if command is None or now_ms <= command.expires_at_ms:
+            return
+        event.pending = None
+        self._metrics.acknowledged(command.decision_id, RenderStatus.FAILED)
 
     @staticmethod
     def _require_revision(event: _EventControl, expected_revision: int) -> None:
@@ -114,6 +134,8 @@ class ControlStore:
 
             event.mode = mode
             event.mode_revision += 1
+            if event.pending is not None:
+                self._metrics.acknowledged(event.pending.decision_id, RenderStatus.REJECTED)
             event.pending = None
             result = ControlMutationResponse(state=self._snapshot(event))
             event.idempotency[idempotency_key] = _IdempotentMutation(fingerprint, result)
@@ -150,6 +172,9 @@ class ControlStore:
             self._require_revision(event, expected_revision)
             if event.mode is ControlMode.ENDED:
                 raise ControlError("EVENT_ENDED", "an ended event cannot take a camera")
+            if event.pending is not None:
+                self._metrics.acknowledged(event.pending.decision_id, RenderStatus.REJECTED)
+                event.pending = None
 
             created_at_ms = now_ms if now_ms is not None else int(time.time() * 1000)
             event.mode_revision += 1
@@ -167,6 +192,116 @@ class ControlStore:
                 expires_at_ms=created_at_ms + self._command_ttl_ms,
             )
             event.pending = command
+            self._metrics.issued(command)
+            result = ControlMutationResponse(state=self._snapshot(event), render_command=command)
+            event.idempotency[idempotency_key] = _IdempotentMutation(fingerprint, result)
+            return result
+
+    def policy_take(
+        self,
+        event_id: str,
+        *,
+        camera_id: CameraId,
+        stream_epoch: int,
+        expected_revision: int,
+        decision_key: str,
+        reason_code: str,
+        now_ms: int | None = None,
+    ) -> ControlMutationResponse:
+        """Issue an AUTO render without changing the operator's revision."""
+        with self._lock:
+            event = self._event(event_id)
+            idempotency_key = f"policy:{decision_key}"
+            fingerprint = (
+                "policy_take",
+                camera_id.value,
+                stream_epoch,
+                expected_revision,
+                decision_key,
+                reason_code,
+            )
+            replay = event.idempotency.get(idempotency_key)
+            if replay is not None:
+                if replay.fingerprint != fingerprint:
+                    raise ControlError(
+                        "IDEMPOTENCY_CONFLICT",
+                        "decision key was already used for another policy action",
+                    )
+                return replay.response
+            self._require_revision(event, expected_revision)
+            if event.mode is not ControlMode.AUTO:
+                raise ControlError("AUTO_NOT_ENABLED", "policy may render only in AUTO mode")
+            created_at_ms = now_ms if now_ms is not None else int(time.time() * 1000)
+            self._expire_pending(event, created_at_ms)
+            if event.pending is not None:
+                raise ControlError("RENDER_PENDING", "wait for the current render acknowledgement")
+            event.decision_sequence += 1
+            command = RenderCommand(
+                decision_id=secrets.token_hex(12),
+                event_id=event_id,
+                control_generation=event.control_generation,
+                decision_sequence=event.decision_sequence,
+                mode_revision=event.mode_revision,
+                camera_id=camera_id,
+                stream_epoch=stream_epoch,
+                reason_code=reason_code,
+                created_at_ms=created_at_ms,
+                expires_at_ms=created_at_ms + self._command_ttl_ms,
+            )
+            event.pending = command
+            self._metrics.issued(command)
+            result = ControlMutationResponse(state=self._snapshot(event), render_command=command)
+            event.idempotency[idempotency_key] = _IdempotentMutation(fingerprint, result)
+            return result
+
+    def policy_slate(
+        self,
+        event_id: str,
+        *,
+        expected_revision: int,
+        decision_key: str,
+        reason_code: str,
+        now_ms: int | None = None,
+    ) -> ControlMutationResponse:
+        """Issue the deterministic safety slate while AUTO is active."""
+        with self._lock:
+            event = self._event(event_id)
+            idempotency_key = f"policy:{decision_key}"
+            fingerprint = (
+                "policy_slate",
+                expected_revision,
+                decision_key,
+                reason_code,
+            )
+            replay = event.idempotency.get(idempotency_key)
+            if replay is not None:
+                if replay.fingerprint != fingerprint:
+                    raise ControlError(
+                        "IDEMPOTENCY_CONFLICT",
+                        "decision key was already used for another policy action",
+                    )
+                return replay.response
+            self._require_revision(event, expected_revision)
+            if event.mode is not ControlMode.AUTO:
+                raise ControlError("AUTO_NOT_ENABLED", "policy may render only in AUTO mode")
+            created_at_ms = now_ms if now_ms is not None else int(time.time() * 1000)
+            self._expire_pending(event, created_at_ms)
+            if event.pending is not None:
+                raise ControlError("RENDER_PENDING", "wait for the current render acknowledgement")
+            event.decision_sequence += 1
+            command = RenderCommand(
+                decision_id=secrets.token_hex(12),
+                event_id=event_id,
+                control_generation=event.control_generation,
+                decision_sequence=event.decision_sequence,
+                mode_revision=event.mode_revision,
+                target=RenderTarget.SLATE,
+                reason_code=reason_code,
+                created_at_ms=created_at_ms,
+                expires_at_ms=created_at_ms + self._command_ttl_ms,
+            )
+            event.pending = command
+            self._metrics.issued(command)
             result = ControlMutationResponse(state=self._snapshot(event), render_command=command)
             event.idempotency[idempotency_key] = _IdempotentMutation(fingerprint, result)
             return result
@@ -205,23 +340,54 @@ class ControlStore:
             observed_at_ms = now_ms if now_ms is not None else int(time.time() * 1000)
             if observed_at_ms > command.expires_at_ms:
                 event.pending = None
+                self._metrics.acknowledged(command.decision_id, RenderStatus.FAILED)
                 raise ControlError(
                     "COMMAND_EXPIRED", "render command expired before acknowledgement"
                 )
 
-            if acknowledgement.status is RenderStatus.APPLIED and (
-                acknowledgement.actual_camera_id != command.camera_id
-                or acknowledgement.actual_stream_epoch != command.stream_epoch
-            ):
-                raise ControlError(
-                    "TARGET_MISMATCH", "compositor applied a different camera or epoch"
-                )
+            if acknowledgement.status is RenderStatus.APPLIED:
+                mismatched = acknowledgement.actual_target is not command.target
+                if command.target is RenderTarget.CAMERA:
+                    mismatched = mismatched or (
+                        acknowledgement.actual_camera_id != command.camera_id
+                        or acknowledgement.actual_stream_epoch != command.stream_epoch
+                    )
+                if mismatched:
+                    raise ControlError(
+                        "TARGET_MISMATCH", "compositor applied a different render target"
+                    )
 
             event.acknowledgements[acknowledgement.decision_id] = acknowledgement
             event.pending = None
+            self._metrics.acknowledged(command.decision_id, acknowledgement.status)
             if acknowledgement.status is RenderStatus.APPLIED:
-                event.live_camera_id = acknowledgement.actual_camera_id
-                event.live_stream_epoch = acknowledgement.actual_stream_epoch
+                if acknowledgement.actual_target is RenderTarget.SLATE:
+                    event.live_camera_id = None
+                    event.live_stream_epoch = None
+                else:
+                    event.live_camera_id = acknowledgement.actual_camera_id
+                    event.live_stream_epoch = acknowledgement.actual_stream_epoch
+            return self._snapshot(event)
+
+    def reconcile(
+        self,
+        event_id: str,
+        report: RenderReconcileRequest,
+    ) -> ControlSnapshot:
+        """Accept the trusted compositor's local state after reconnecting."""
+        with self._lock:
+            event = self._event(event_id)
+            if report.control_generation != event.control_generation:
+                raise ControlError("STALE_GENERATION", "reconciliation used an old generation")
+            if event.mode is ControlMode.ENDED:
+                raise ControlError("EVENT_ENDED", "an ended event cannot be reconciled")
+            if event.pending is not None:
+                raise ControlError(
+                    "PENDING_DECISION",
+                    "resolve or invalidate the pending render before reconciliation",
+                )
+            event.live_camera_id = report.actual_camera_id
+            event.live_stream_epoch = report.actual_stream_epoch
             return self._snapshot(event)
 
 

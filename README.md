@@ -73,7 +73,7 @@ See [docs/stage-0-a-handoff.md](docs/stage-0-a-handoff.md) for the A-to-D live p
 
 Person A's Stage 1 protocol, frame/PCM contracts and physical handoff are in [docs/stage-1-a-handoff.md](docs/stage-1-a-handoff.md).
 
-Person A's independent Stage 2 control/health/worker preliminaries are documented in [docs/stage-2-a-prep-handoff.md](docs/stage-2-a-prep-handoff.md). They remain fixture-only until the Stage 1 physical integration gate passes.
+Person A's Stage 2 control, health, ingestion and integration work is documented in [docs/stage-2-a-handoff.md](docs/stage-2-a-handoff.md). A's automated fixture is complete; D's real three-camera Mac acceptance rows remain the system gate.
 
 ## Producer receiver (Person D's Mac)
 

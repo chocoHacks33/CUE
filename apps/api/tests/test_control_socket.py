@@ -1,5 +1,6 @@
 import time
 
+import pytest
 from fastapi.testclient import TestClient
 
 from cue_api.contracts import CameraId
@@ -47,17 +48,25 @@ def test_control_mutations_require_auth_revision_and_idempotency() -> None:
     assert conflict.json()["detail"]["code"] == "REVISION_CONFLICT"
 
 
-def test_observer_socket_is_read_only() -> None:
+@pytest.mark.parametrize(
+    "message",
+    [
+        {"type": "render.ack", "ack": {}},
+        {"type": "render.reconcile", "report": {}},
+        {"type": "receiver.readiness", "readiness": {}},
+    ],
+)
+def test_observer_socket_is_read_only(message: dict[str, object]) -> None:
     test_client = client()
     token = issue_session(test_client, ControlRole.OBSERVER)
     with test_client.websocket_connect("/api/v1/events/demo/control") as socket:
         socket.send_json({"type": "control.authenticate", "token": token})
         assert socket.receive_json()["type"] == "control.authenticated"
         assert socket.receive_json()["type"] == "control.state"
-        socket.send_json({"type": "render.ack", "ack": {}})
-        message = socket.receive_json()
-        assert message["type"] == "control.error"
-        assert message["code"] == "OBSERVER_READ_ONLY"
+        socket.send_json(message)
+        response = socket.receive_json()
+        assert response["type"] == "control.error"
+        assert response["code"] == "OBSERVER_READ_ONLY"
 
 
 def test_director_ack_is_the_only_step_that_sets_the_live_camera() -> None:
@@ -95,3 +104,69 @@ def test_director_ack_is_the_only_step_that_sets_the_live_camera() -> None:
         state = socket.receive_json()["state"]
         assert state["liveCameraId"] == "CAM-GUEST"
         assert state["liveStreamEpoch"] == 3
+
+    metrics = test_client.get(
+        "/api/v1/events/demo/control-metrics",
+        headers={"X-CUE-Producer-Secret": "producer-test-secret"},
+    )
+    assert metrics.status_code == 200
+    assert metrics.json()["appliedCount"] == 1
+    assert metrics.json()["outstandingCount"] == 0
+
+
+def test_director_readiness_is_validated_stored_and_broadcast() -> None:
+    test_client = client()
+    token = issue_session(test_client, ControlRole.DIRECTOR)
+    slots = []
+    for camera_id in ("CAM-HOST", "CAM-GUEST", "CAM-WIDE"):
+        slots.append(
+            {
+                "cameraId": camera_id,
+                "publisherIdentity": f"publisher:{camera_id}",
+                "streamEpoch": 1,
+                "videoTrackSid": f"track:{camera_id}",
+                "audioTrackSid": "master" if camera_id == "CAM-HOST" else None,
+                "decoded": True,
+                "renderable": True,
+                "lastFrameAgeMs": 20,
+                "framesProgressing": True,
+                "frameCount": 2,
+                "width": 1280,
+                "height": 720,
+                "state": "video-ready",
+            }
+        )
+    readiness = {
+        "contractVersion": "0.1.0",
+        "eventId": "demo",
+        "rendererId": "renderer-one",
+        "rendererGeneration": 1,
+        "receiverIdentity": "receiver:demo:director:1",
+        "connected": True,
+        "clockDomain": "renderer-monotonic",
+        "reportedAtMs": 500,
+        "currentSource": "CAM-HOST",
+        "masterAudio": {
+            "cameraId": "CAM-HOST",
+            "trackSid": "master",
+            "attached": True,
+            "playbackAllowed": True,
+        },
+        "slots": slots,
+    }
+
+    with test_client.websocket_connect("/api/v1/events/demo/control") as socket:
+        socket.send_json({"type": "control.authenticate", "token": token})
+        assert socket.receive_json()["type"] == "control.authenticated"
+        assert socket.receive_json()["type"] == "control.state"
+        socket.send_json({"type": "receiver.readiness", "readiness": readiness})
+        broadcast = socket.receive_json()
+        assert broadcast["type"] == "receiver.readiness"
+        assert broadcast["readiness"]["rendererId"] == "renderer-one"
+
+    response = test_client.get(
+        "/api/v1/events/demo/readiness",
+        headers={"X-CUE-Producer-Secret": "producer-test-secret"},
+    )
+    assert response.status_code == 200
+    assert response.json()["currentSource"] == "CAM-HOST"

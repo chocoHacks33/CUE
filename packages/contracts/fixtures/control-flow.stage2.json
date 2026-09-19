@@ -20,6 +20,7 @@
     "reasonCode": "FIXTURE_CONFIRMED_GUEST"
   },
   "expectedCommand": {
+    "target": "CAMERA",
     "decisionSequence": 11,
     "modeRevision": 5,
     "cameraId": "CAM-GUEST",
@@ -38,4 +39,3 @@
     "control message sent by an OBSERVER"
   ]
 }
-

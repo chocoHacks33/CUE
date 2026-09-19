@@ -35,6 +35,7 @@ from cue_api.livekit_tokens import (
     PublisherTokenIssuer,
     ReceiverTokenIssuer,
 )
+from cue_api.readiness import ReadinessStore
 from cue_api.settings import Settings
 
 EventIdPath = Annotated[
@@ -63,6 +64,7 @@ def create_app(
     control_store = ControlStore()
     control_sessions = ControlSessionStore()
     control_hub = ControlHub()
+    readiness_store = ReadinessStore()
 
     app = FastAPI(
         title="CUE API",
@@ -381,14 +383,21 @@ def create_app(
 
     app.include_router(build_guest_router(app_settings, registry, observations))
     app.include_router(
-        build_control_router(control_store, control_sessions, control_hub, require_producer)
+        build_control_router(
+            control_store,
+            control_sessions,
+            control_hub,
+            readiness_store,
+            require_producer,
+        )
     )
     app.add_api_websocket_route(
         "/api/v1/events/{event_id}/control",
-        build_control_websocket(control_store, control_sessions, control_hub),
+        build_control_websocket(control_store, control_sessions, control_hub, readiness_store),
     )
     app.state.control_store = control_store
     app.state.control_sessions = control_sessions
+    app.state.readiness_store = readiness_store
 
     return app
 
