@@ -18,6 +18,7 @@ class AdmissionCode(StrEnum):
     NOT_APPROVED = "not_approved"
     REJECTED = "rejected"
     ALREADY_USED = "already_used"
+    EVENT_ENDED = "event_ended"
 
 
 class AdmissionError(RuntimeError):
@@ -70,6 +71,7 @@ class CameraBinding:
     display_name: str
     current_video_track_sid: str | None = None
     stream_epoch: int = 1
+    has_seen_video_track: bool = False
 
 
 @dataclass(frozen=True)
@@ -84,6 +86,13 @@ class CreatedClaim:
     claim: DeviceClaim
     claim_secret: str
     expires_in_seconds: int
+
+
+@dataclass(frozen=True)
+class AdmissionCleanup:
+    grants_deleted: int
+    claims_deleted: int
+    bindings_deleted: int
 
 
 _VERIFICATION_COLOURS = ("BLUE", "GREEN", "ORANGE", "PURPLE", "RED", "YELLOW")
@@ -115,10 +124,12 @@ class AdmissionStore:
         self._grants_by_digest: dict[str, PairingGrant] = {}
         self._claims: dict[str, DeviceClaim] = {}
         self._bindings: dict[tuple[str, CameraId], CameraBinding] = {}
+        self._ended_events: set[str] = set()
 
     def create_grant(self, event_id: str, camera_id: CameraId) -> CreatedGrant:
         now = self._clock()
         with self._lock:
+            self.require_active(event_id)
             self._expire(now)
             slot = (event_id, camera_id)
             if slot in self._bindings or self._slot_is_reserved(event_id, camera_id):
@@ -240,6 +251,13 @@ class AdmissionStore:
                 if bound_event == event_id
             ]
 
+    def get_binding(self, event_id: str, camera_id: CameraId) -> CameraBinding:
+        with self._lock:
+            binding = self._bindings.get((event_id, camera_id))
+            if binding is None:
+                raise AdmissionError(AdmissionCode.NOT_FOUND, "Active binding was not found")
+            return binding
+
     def list_claims(self, event_id: str) -> list[DeviceClaim]:
         now = self._clock()
         with self._lock:
@@ -274,16 +292,68 @@ class AdmissionStore:
                 raise AdmissionError(AdmissionCode.NOT_FOUND, "Active binding was not found")
             if binding.current_video_track_sid == track_sid:
                 return binding
-            next_epoch = binding.stream_epoch
-            if binding.current_video_track_sid is not None:
-                next_epoch += 1
+            next_epoch = binding.stream_epoch + int(binding.has_seen_video_track)
             updated = replace(
                 binding,
                 current_video_track_sid=track_sid,
                 stream_epoch=next_epoch,
+                has_seen_video_track=True,
             )
             self._bindings[slot] = updated
             return updated
+
+    def release_video_track(
+        self,
+        event_id: str,
+        camera_id: CameraId,
+        participant_identity: str,
+        track_sid: str,
+    ) -> tuple[CameraBinding, bool]:
+        """Clear only the exact current track; a late old-track event is harmless."""
+        with self._lock:
+            slot = (event_id, camera_id)
+            binding = self._bindings.get(slot)
+            if binding is None or not secrets.compare_digest(
+                binding.participant_identity, participant_identity
+            ):
+                raise AdmissionError(AdmissionCode.NOT_FOUND, "Active binding was not found")
+            if binding.current_video_track_sid != track_sid:
+                return binding, False
+            updated = replace(binding, current_video_track_sid=None)
+            self._bindings[slot] = updated
+            return updated, True
+
+    def require_active(self, event_id: str) -> None:
+        with self._lock:
+            if event_id in self._ended_events:
+                raise AdmissionError(AdmissionCode.EVENT_ENDED, "Event has ended")
+
+    def end_event(self, event_id: str) -> AdmissionCleanup:
+        """Revoke admission state and permanently fence this in-process event ID."""
+        with self._lock:
+            self._ended_events.add(event_id)
+            grant_keys = [
+                digest
+                for digest, grant in self._grants_by_digest.items()
+                if grant.event_id == event_id
+            ]
+            claim_keys = [
+                claim_id
+                for claim_id, claim in self._claims.items()
+                if claim.event_id == event_id
+            ]
+            binding_keys = [key for key in self._bindings if key[0] == event_id]
+            for digest in grant_keys:
+                del self._grants_by_digest[digest]
+            for claim_id in claim_keys:
+                del self._claims[claim_id]
+            for key in binding_keys:
+                del self._bindings[key]
+            return AdmissionCleanup(
+                grants_deleted=len(grant_keys),
+                claims_deleted=len(claim_keys),
+                bindings_deleted=len(binding_keys),
+            )
 
     def _get_claim(self, claim_id: str, now: float) -> DeviceClaim:
         claim = self._claims.get(claim_id)

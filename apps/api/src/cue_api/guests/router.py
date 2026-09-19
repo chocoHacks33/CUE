@@ -47,7 +47,9 @@ def build_guest_router(
     registry: GuestRegistry,
     observations: ObservationStore,
     clock: Callable[[], int] = _default_clock,
+    ensure_event_active: Callable[[str], None] | None = None,
 ) -> APIRouter:
+    require_active = ensure_event_active or (lambda _event_id: None)
     def require_operator(
         x_cue_bootstrap_secret: str | None = Header(default=None),
     ) -> None:
@@ -75,6 +77,7 @@ def build_guest_router(
         status_code=status.HTTP_201_CREATED,
     )
     def enrol_guest(payload: GuestEnrolmentRequest) -> GuestRecord:
+        require_active(payload.event_id)
         try:
             return registry.enrol(
                 event_id=payload.event_id,
@@ -105,6 +108,7 @@ def build_guest_router(
         status_code=status.HTTP_201_CREATED,
     )
     def add_reference(guest_id: str, payload: ReferenceSubmission) -> GuestRecord:
+        require_active(payload.event_id)
         try:
             return registry.add_reference(
                 event_id=payload.event_id,
@@ -178,6 +182,7 @@ def build_guest_router(
         status_code=status.HTTP_202_ACCEPTED,
     )
     def record_observation(observation: VisualObservation) -> VisualObservation:
+        require_active(observation.event_id)
         guest_id = observation.subject.guest_id
         if guest_id is not None and not registry.is_identifiable(observation.event_id, guest_id):
             raise HTTPException(
@@ -202,6 +207,7 @@ def build_guest_router(
 
     @router.post("/vision/invalidate", response_model=ObservationSnapshot)
     def invalidate(payload: InvalidationRequest) -> ObservationSnapshot:
+        require_active(payload.event_id)
         observations.invalidate(
             event_id=payload.event_id,
             camera_id=payload.camera_id,

@@ -185,3 +185,9 @@ class ReadinessStore:
     def health(self, event_id: str) -> CameraHealthRegistry:
         with self._lock:
             return self._health.setdefault(event_id, CameraHealthRegistry())
+
+    def drop_event(self, event_id: str) -> bool:
+        with self._lock:
+            removed = self._reports.pop(event_id, None) is not None
+            self._health.pop(event_id, None)
+            return removed

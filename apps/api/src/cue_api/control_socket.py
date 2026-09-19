@@ -50,6 +50,20 @@ class ControlHub:
                 except (RuntimeError, WebSocketDisconnect):
                     self.disconnect(event_id, role, socket)
 
+    async def close_event(self, event_id: str, *, code: int = 1000) -> int:
+        sockets = [
+            socket
+            for role_sockets in self._connections.get(event_id, {}).values()
+            for socket in tuple(role_sockets)
+        ]
+        for socket in sockets:
+            try:
+                await socket.close(code=code)
+            except RuntimeError:
+                pass
+        self._connections.pop(event_id, None)
+        return len(sockets)
+
 
 def _control_http_error(error: ControlError) -> HTTPException:
     code_to_status = {
@@ -68,6 +82,7 @@ def build_control_router(
     sessions: ControlSessionStore,
     hub: ControlHub,
     readiness: ReadinessStore,
+    require_active_event: Callable[[str], None],
     require_producer: Callable[[str | None], None],
 ) -> APIRouter:
     router = APIRouter(prefix="/api/v1/events/{event_id}", tags=["control"])
@@ -79,6 +94,7 @@ def build_control_router(
         x_cue_producer_secret: str | None = Header(default=None),
     ) -> ControlSessionResponse:
         require_producer(x_cue_producer_secret)
+        require_active_event(event_id)
         token, ttl = sessions.issue(event_id, payload.role)
         return ControlSessionResponse(token=token, role=payload.role, expires_in_seconds=ttl)
 
@@ -218,6 +234,11 @@ def build_control_websocket(
                 if role is not ControlRole.DIRECTOR:
                     await websocket.send_json(
                         {"type": "control.error", "code": "OBSERVER_READ_ONLY"}
+                    )
+                    continue
+                if store.snapshot(event_id).mode.value == "ENDED":
+                    await websocket.send_json(
+                        {"type": "control.error", "code": "EVENT_ENDED"}
                     )
                     continue
                 try:

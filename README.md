@@ -75,6 +75,8 @@ Person A's Stage 1 protocol, frame/PCM contracts and physical handoff are in [do
 
 Person A's Stage 2 control, health, ingestion and integration work is documented in [docs/stage-2-a-handoff.md](docs/stage-2-a-handoff.md). A's automated fixture is complete; D's real three-camera Mac acceptance rows remain the system gate.
 
+Person A's Stage 3 reconnect, duplicate-slot, cleanup and state-reconciliation preliminaries are documented in [docs/stage-3-a-prep-handoff.md](docs/stage-3-a-prep-handoff.md). They can be merged after Stage 2; the real three-laptop live sequence on D's Mac remains the Stage 3 gate.
+
 ## Producer receiver (Person D's Mac)
 
 `/producer` on the same web app is the subscribe-only Stage 0 receiver. It requests a credential from `POST /api/v1/stage0/receiver-token` (same Stage 0 secret, `canPublish: false`), joins the same room, and binds `CAM-HOST`, `CAM-GUEST` and `CAM-WIDE` tiles from each participant's server-set metadata. Only `CAM-HOST`'s microphone is played. The Mac never publishes.
