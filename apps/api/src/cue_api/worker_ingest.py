@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from cue_api.contracts import CAMERA_CONTRACTS, CameraId
+from cue_api.guests.types import DecodedFrame
 from cue_api.media_contracts import (
     DecodedAudioChunk,
     DecodedVideoFrame,
@@ -13,7 +14,6 @@ from cue_api.media_contracts import (
     PcmContinuityGuard,
     PixelFormat,
 )
-from cue_api.guests.types import DecodedFrame
 
 
 @dataclass(frozen=True)
