@@ -10,7 +10,7 @@ import math
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 
-from cue_vision.types import Embedding
+from cue_api.vision.types import Embedding
 
 
 def normalise(values: Sequence[float]) -> Embedding:

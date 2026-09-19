@@ -49,8 +49,8 @@ and an unknown face stays unknown. See [docs/guest-privacy.md](docs/guest-privac
 [docs/stage-1-b-handoff.md](docs/stage-1-b-handoff.md).
 
 ```bash
-python -m pip install -e "apps/vision[dev]"        # core, no OpenCV needed
-python -m pip install -e "apps/vision[opencv,dev]" # plus live inference
+python -m pip install -e "apps/api[dev]"           # core, no OpenCV needed
+python -m pip install -e "apps/api[vision,dev]"    # plus live inference
 ```
 
 ## Verification

@@ -10,8 +10,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from cue_vision.models import DEFAULT_MODEL_DIR, SFACE, YUNET, verify
-from cue_vision.types import DecodedFrame, Embedding, FaceDetection, PixelBox
+from cue_api.vision.models import DEFAULT_MODEL_DIR, SFACE, YUNET, verify
+from cue_api.vision.types import DecodedFrame, Embedding, FaceDetection, PixelBox
 
 
 def _import_cv2() -> Any:
@@ -20,7 +20,7 @@ def _import_cv2() -> Any:
     except ImportError as error:  # pragma: no cover - environment dependent
         raise RuntimeError(
             "OpenCV is required for live inference. Install the extra: "
-            'python -m pip install -e "apps/vision[opencv]"'
+            'python -m pip install -e "apps/api[vision]"'
         ) from error
     return cv2
 
