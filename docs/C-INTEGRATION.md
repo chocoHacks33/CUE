@@ -101,3 +101,69 @@ lane.on_camera_state(state_from_a_and_b, now=t())
 lane.on_transcript_message(dg_msg.model_dump() | {"audio_epoch": epoch}, now=t())
 lane.tick(now=t())
 ```
+
+---
+
+## Stage 3 — live lane (`cue_api.c_lane_live.LiveLane`)
+
+`LiveLane` is the async runner that wires A's PCM source, my Deepgram
+bridge, B's visual observations, D's control transport and the
+Stage-2 CLane together. Nothing in `cue_api.c_lane_live` imports A/B/D
+internals — everything is a small local `Protocol` you satisfy with
+a duck-typed object.
+
+Chain:
+
+```
+A.PcmSource            (async iterable of DecodedAudioChunk)
+    -> PcmContinuityGuard + resample-to-16k-mono
+    -> connection.send_media(bytes)                 (Deepgram)
+    -> connection.on(Message) -> LiveLane.on_deepgram_message
+    -> CLane.on_transcript_message()
+    -> semantics.parser.parse (OpenAI, pinned model)
+    -> policy.session.DirectorSession
+    -> policy.log.DecisionRecord (+ latency trace)
+    -> policy.wire.to_wire(record) -> DecisionEvent
+    -> sender.send(event, decision_seq)             (D's transport)
+D.AckReceiver.wait_ack() -> LiveLane -> CLane.on_ack()
+```
+
+### Protocols A/B/D satisfy
+
+| Protocol            | Signature                                                        | Owned by |
+|---------------------|------------------------------------------------------------------|----------|
+| `PcmSource`         | `async def stream() -> AsyncIterator[DecodedAudioChunk]`         | A        |
+| `CameraStateProvider` | `def cameras(now: float) -> Mapping[str, Mapping[str, Any]]`   | A + B    |
+| `DecisionSender`    | `def send(event: DecisionEvent, *, decision_seq: int) -> None`   | D        |
+| `AckReceiver`       | `def wait_ack() -> tuple[int, bool, float] \| None`              | D        |
+| `DeepgramSession`   | context manager yielding `send_media(bytes)`; forward messages via `LiveLane.on_deepgram_message(msg, now)` | C helper |
+
+### Latency trace stamped onto every DecisionRecord
+
+`record.latencies_ms` now carries a per-decision timeline:
+
+| Key             | Definition                                                          |
+|-----------------|---------------------------------------------------------------------|
+| `final_ms`      | `audio_seconds_sent - transcript_span.ended_at` (audio time)        |
+| `cue_decide_ms` | wall-clock: last Deepgram final → decision emitted                  |
+| `ack_ms`        | *filled by `scripts/latency_report.py`* — decision emitted → D's ACK |
+| `_identity`     | `1.0` when the lane is `role_based`, `0.0` when face identity is on |
+
+Aggregate with `python scripts/latency_report.py <decisions.jsonl> [--acks acks.jsonl]`. p50 / p95 per hop.
+
+### Identity mode
+
+If no B-side visual-observation provider is wired (or you pass
+`camera_state=None`), LiveLane runs with `role_based=True`. Every
+DecisionRecord is stamped `latencies_ms["_identity"] = 1.0` so nobody can
+mistake a role-based cut for face recognition. When B's provider is
+plugged in, pass `role_based=False`.
+
+### Standalone runner
+
+`scripts/live_lane.py --source mic` boots the pipeline on one laptop
+with a synthetic `DecodedAudioChunk` stream from the local mic and a
+fake healthy camera state. Requires `OPENAI_API_KEY` and
+`DEEPGRAM_API_KEY`; exits **2** with a clear message if either is
+missing. `CUE_MODEL` must also be set — otherwise every parse
+returns a safe HOLD (never an unpinned-model call).
