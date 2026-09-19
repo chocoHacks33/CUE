@@ -12,7 +12,7 @@ from cue_api.contracts import (
     PublisherTokenResponse,
     TopologyResponse,
 )
-from cue_api.guests import GuestRegistry, build_guest_router
+from cue_api.guests import GuestRegistry, ObservationStore, build_guest_router
 from cue_api.livekit_tokens import LiveKitPublisherTokenIssuer, PublisherTokenIssuer
 from cue_api.settings import Settings
 
@@ -21,10 +21,12 @@ def create_app(
     settings: Settings | None = None,
     token_issuer: PublisherTokenIssuer | None = None,
     guest_registry: GuestRegistry | None = None,
+    observation_store: ObservationStore | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings()
     issuer = token_issuer or LiveKitPublisherTokenIssuer(app_settings)
     registry = guest_registry or GuestRegistry()
+    observations = observation_store or ObservationStore()
 
     app = FastAPI(
         title="CUE API",
@@ -103,7 +105,7 @@ def create_app(
             expires_in_seconds=issued.expires_in_seconds,
         )
 
-    app.include_router(build_guest_router(app_settings, registry))
+    app.include_router(build_guest_router(app_settings, registry, observations))
 
     return app
 

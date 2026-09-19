@@ -23,7 +23,8 @@ from cue_api.guests.contracts import (
     ReferenceSubmission,
     VisualObservation,
 )
-from cue_api.guests.registry import normalise_embedding
+from cue_api.guests.observations import ObservationStore
+from cue_api.guests.registry import GuestRegistry, normalise_embedding
 
 FIXTURES = Path(__file__).resolve().parents[3] / "packages" / "contracts" / "fixtures"
 
@@ -138,6 +139,24 @@ def test_freshness_is_evaluated_against_the_expiry_not_the_arrival() -> None:
 
     assert observation.is_fresh(expires)
     assert not observation.is_fresh(expires + 1)
+
+
+def test_a_late_observation_does_not_become_fresh_by_arriving_late() -> None:
+    store = ObservationStore()
+    registry = GuestRegistry()
+    observation = VisualObservation.model_validate(confirmed())
+    store.record(observation)
+
+    snapshot = store.snapshot(
+        event_id=observation.event_id,
+        now_ms=observation.timing.expires_at_ms + 5_000,
+        gallery_version=registry.gallery_version,
+    )
+
+    view = next(item for item in snapshot.cameras if item.camera_id == observation.camera_id)
+    assert view.observation is not None
+    assert view.fresh is False
+    assert view.age_ms is not None and view.age_ms > IDENTITY_TTL_MS
 
 
 def test_an_embedding_is_normalised_on_the_way_in() -> None:
