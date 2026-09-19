@@ -40,6 +40,19 @@ Prerequisites: an even-numbered Node.js LTS release (20, 22 or 24+), Python 3.11
 
 Camera access works on `localhost` or HTTPS. A different laptop cannot use D's `localhost`; D must expose the web/API endpoint through the team's approved authenticated HTTPS setup.
 
+## Guest identity (Person B)
+
+`CAM-GUEST` is video only. Identifying anyone on it is opt-in and event-scoped:
+references live in memory on D's Mac, are deleted on withdrawal or at event end,
+and an unknown face stays unknown. See [docs/guest-privacy.md](docs/guest-privacy.md),
+[docs/vision-models.md](docs/vision-models.md) and
+[docs/stage-1-b-handoff.md](docs/stage-1-b-handoff.md).
+
+```bash
+python -m pip install -e "apps/vision[dev]"        # core, no OpenCV needed
+python -m pip install -e "apps/vision[opencv,dev]" # plus live inference
+```
+
 ## Verification
 
 ```bash
@@ -48,6 +61,10 @@ npm test
 npm run build
 
 cd apps/api
+python -m pytest
+python -m ruff check .
+
+cd ../vision
 python -m pytest
 python -m ruff check .
 ```

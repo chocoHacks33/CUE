@@ -1,0 +1,50 @@
+{
+  "visionContractVersion": "0.1.0",
+  "observationId": "obs-cam-guest-3-4822",
+  "eventId": "hackmit-demo",
+  "cameraId": "CAM-GUEST",
+  "streamEpoch": 3,
+  "trackKey": "CAM-GUEST:3:face-7",
+  "frameSequence": 4822,
+  "status": "AMBIGUOUS",
+  "subject": {
+    "guestId": null,
+    "displayName": null,
+    "referenceVersion": null
+  },
+  "box": { "x": 0.4, "y": 0.21, "width": 0.16, "height": 0.29 },
+  "quality": {
+    "passed": true,
+    "score": 0.74,
+    "faceWidthRatio": 0.16,
+    "sharpness": 0.62,
+    "brightness": 0.51,
+    "detectorScore": 0.9,
+    "failedChecks": []
+  },
+  "match": {
+    "calibratedConfidence": null,
+    "calibrationId": "sface-cosine-provisional-v1",
+    "calibrationStatus": "PROVISIONAL_DEFAULT",
+    "margin": 0.02,
+    "similarity": 0.44,
+    "runnerUpGuestId": "guest-daniel",
+    "consecutiveConfirmations": 0
+  },
+  "provenance": {
+    "pipelineVersion": "cue-vision/0.1.0",
+    "detector": "opencv-yunet",
+    "detectorVersion": "2023mar",
+    "embedder": "opencv-sface",
+    "embedderVersion": "2021dec",
+    "galleryVersion": 7
+  },
+  "timing": {
+    "capturedAtMs": null,
+    "observedAtMs": 1758294000245,
+    "expiresAtMs": 1758294001745,
+    "clockDomain": "WORKER_MONOTONIC_MAPPED",
+    "clockUncertaintyMs": 35
+  },
+  "usableForNamedTake": false
+}
