@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import jwt
+import pytest
 from fastapi.testclient import TestClient
 
 from cue_api.contracts import CameraId, ReceiverRole
@@ -40,7 +41,12 @@ def configured_settings() -> Settings:
     )
 
 
-def test_health_distinguishes_liveness_from_readiness() -> None:
+def test_health_distinguishes_liveness_from_readiness(monkeypatch: pytest.MonkeyPatch) -> None:
+    # cue_api.semantics.parser calls load_dotenv() at import time (test_director imports it),
+    # so on a machine with a real .env the credentials leak into os.environ and this
+    # "unconfigured" app would report ready. Clear them so the test is hermetic.
+    for name in ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "CUE_BOOTSTRAP_SECRET"):
+        monkeypatch.delenv(name, raising=False)
     client = TestClient(create_app(settings=Settings(_env_file=None)))
 
     live = client.get("/health/live")

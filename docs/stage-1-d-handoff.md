@@ -54,3 +54,11 @@ The noise-frame run proves the model loads and inference executes on this machin
 | Three feeds received on the Mac with physical markers | A, B, C publishing |
 | Test 3: each Windows laptop records another laptop's feed as an observer | observer sessions; the receiver token endpoint already supports `receiverRole: "OBSERVER"` |
 | Stage 1 exit gate | all of the above |
+
+## 5. Found while verifying on the Mac
+
+| Finding | Effect | What I did | Owner to decide |
+|---|---|---|---|
+| `cue_api/semantics/parser.py` calls `load_dotenv()` at import time, and `tests/test_director.py` imports it | On any machine with a real `.env`, the whole pytest session sees the credentials in `os.environ`, so A's `test_health_distinguishes_liveness_from_readiness` (which builds `Settings(_env_file=None)` and expects 503) fails. It passes on machines with an empty `.env`, which is why nobody saw it before the Mac had credentials. The running API is unaffected because `main.py` never imports the parser | Made that one test hermetic with `monkeypatch.delenv` (cross-owner edit in A's test file, 6 lines) | C: consider moving `load_dotenv()` out of import time into the client factory so importing a module has no environment side effect |
+| Editable installs of `cue_api` and `cue_vision` in `apps/api/.venv` stopped resolving (`ModuleNotFoundError`) although `pip show` listed them; pytest still passed via `pythonpath = ["src"]` | Any script using the venv interpreter directly, including uvicorn started from another directory, could fail to import | Re-ran `pip install -e` for both; imports resolve again | Environment only, nothing in the repo |
+| Finder-style duplicate directories (`node_modules/@types/react 2`, `.vite/vitest 2`, and others) appeared inside `node_modules` between two green builds and broke `tsc` with TS2688 | `npm run typecheck` and `npm run build` failed | Deleted `node_modules`, ran `npm ci`; no source files were duplicated | Probably a sync tool on this Documents folder. If a `* 2` file ever shows up in `git status`, do not commit it |
