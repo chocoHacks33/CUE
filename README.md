@@ -76,3 +76,5 @@ See [docs/stage-0-a-handoff.md](docs/stage-0-a-handoff.md) for the A-to-D live p
 `/producer` on the same web app is the subscribe-only Stage 0 receiver. It requests a credential from `POST /api/v1/stage0/receiver-token` (same Stage 0 secret, `canPublish: false`), joins the same room, and binds `CAM-HOST`, `CAM-GUEST` and `CAM-WIDE` tiles from each participant's server-set metadata. Only `CAM-HOST`'s microphone is played. The Mac never publishes.
 
 Mac startup, tunnel and verification steps: [docs/stage-0-d-mac-run.md](docs/stage-0-d-mac-run.md).
+
+`/recorder` is the standalone local recording test for any laptop (Stage 1, Test 1): capture your own webcam under the publisher's media policy, record, download, play outside the app. Stage 1 notes: [docs/stage-1-d-handoff.md](docs/stage-1-d-handoff.md).

@@ -1,4 +1,10 @@
-import { CAMERA_CONTRACTS, CAMERA_IDS, type CameraId, parsePublisherMetadata } from "@cue/contracts";
+import {
+  CAMERA_CONTRACTS,
+  CAMERA_IDS,
+  type CameraId,
+  parsePublisherMetadata,
+  type ReceiverReadiness,
+} from "@cue/contracts";
 import { RemoteParticipant, Room, RoomEvent, Track } from "livekit-client";
 import type {
   RemoteAudioTrack,
@@ -9,6 +15,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { RecordingTest } from "../recording/RecordingTest";
+import { buildReadiness } from "./readiness";
 import { requestReceiverToken } from "./receiverApi";
 import {
   applyStallCheck,
@@ -105,8 +112,18 @@ export function ProducerPage() {
   const [unassigned, setUnassigned] = useState<Record<string, string>>({});
   const [recordSlot, setRecordSlot] = useState<CameraId>(MASTER_AUDIO_CAMERA);
   const [recordWithAudio, setRecordWithAudio] = useState(true);
+  const [readiness, setReadiness] = useState<ReceiverReadiness | null>(null);
 
   const roomRef = useRef<Room | null>(null);
+  /** Stable for this tab. A second tab is a different renderer and can never ACK for this one. */
+  const rendererIdRef = useRef(`renderer-${crypto.randomUUID().slice(0, 8)}`);
+  const rendererGenerationRef = useRef(0);
+  const readinessRef = useRef<ReceiverReadiness | null>(null);
+  const readinessContextRef = useRef({
+    receiverIdentity: null as string | null,
+    connected: false,
+    audioPlaybackAllowed: true,
+  });
   const slotsRef = useRef<Slots>(emptySlots());
   const connectedEventRef = useRef(eventId);
   const videoElements = useRef(new Map<CameraId, HTMLVideoElement>());
@@ -115,6 +132,11 @@ export function ProducerPage() {
   const audioElementRef = useRef<HTMLAudioElement | null>(null);
   const frameWatchers = useRef(new Map<CameraId, FrameWatcher>());
   const ignoredPublications = useRef(new Set<string>());
+
+  const noteAudioPlayback = useCallback((allowed: boolean) => {
+    readinessContextRef.current = { ...readinessContextRef.current, audioPlaybackAllowed: allowed };
+    setAudioPlaybackAllowed(allowed);
+  }, []);
 
   const appendLog = useCallback((line: string) => {
     setLog((previous) => [`${timestamp()}  ${line}`, ...previous].slice(0, MAX_LOG_LINES));
@@ -137,6 +159,23 @@ export function ProducerPage() {
       slotsRef.current = applyStallCheck(slotsRef.current, t);
       setSlots(slotsRef.current);
       setNow(t);
+      const ctx = readinessContextRef.current;
+      readinessRef.current = buildReadiness(
+        slotsRef.current,
+        t,
+        {
+          eventId: connectedEventRef.current,
+          rendererId: rendererIdRef.current,
+          rendererGeneration: rendererGenerationRef.current,
+          receiverIdentity: ctx.receiverIdentity,
+          connected: ctx.connected,
+          audioPlaybackAllowed: ctx.audioPlaybackAllowed,
+          audioAttached: audioTrackRef.current !== null,
+          currentSource: null,
+        },
+        readinessRef.current,
+      );
+      setReadiness(readinessRef.current);
     }, TICK_MS);
     return () => window.clearInterval(id);
   }, []);
@@ -339,7 +378,7 @@ export function ProducerPage() {
       audioTrackRef.current = audioTrack;
       if (audioElementRef.current) audioTrack.attach(audioElementRef.current);
       const allowed = roomRef.current?.canPlaybackAudio ?? true;
-      setAudioPlaybackAllowed(allowed);
+      noteAudioPlayback(allowed);
       commitSlots((s) => setAudioTrack(s, cameraId, publication.trackSid, allowed));
       appendLog(`Master audio ${publication.trackSid} attached from ${participant.identity}`);
     }
@@ -389,6 +428,7 @@ export function ProducerPage() {
         await room.disconnect();
       }
       resetSlots();
+      readinessContextRef.current = { ...readinessContextRef.current, receiverIdentity: null, connected: false };
       setRoomName(null);
       setLocalIdentity(null);
       setLocalPublications(0);
@@ -453,7 +493,7 @@ export function ProducerPage() {
           appendLog(`${participant.identity} ${publication.source} stream ${streamState}`);
         })
         .on(RoomEvent.AudioPlaybackStatusChanged, (playing) => {
-          setAudioPlaybackAllowed(playing);
+          noteAudioPlayback(playing);
           commitSlots((s) => setAudioPlayback(s, playing));
         })
         .on(RoomEvent.LocalTrackPublished, () => {
@@ -488,6 +528,12 @@ export function ProducerPage() {
         autoSubscribe: false,
       });
 
+      rendererGenerationRef.current += 1;
+      readinessContextRef.current = {
+        receiverIdentity: room.localParticipant.identity,
+        connected: true,
+        audioPlaybackAllowed: readinessContextRef.current.audioPlaybackAllowed,
+      };
       setRoomName(credential.roomName);
       setLocalIdentity(room.localParticipant.identity);
       setLocalPublications(room.localParticipant.trackPublications.size);
@@ -500,7 +546,7 @@ export function ProducerPage() {
       } catch {
         // Autoplay policy: the Enable audio button retries inside a user gesture.
       }
-      setAudioPlaybackAllowed(room.canPlaybackAudio);
+      noteAudioPlayback(room.canPlaybackAudio);
 
       setStatus("connected");
       setDetail("Connected subscribe-only. Tiles bind to server metadata, not join order.");
@@ -523,7 +569,7 @@ export function ProducerPage() {
     } catch (error) {
       appendLog(`Audio playback still blocked: ${error instanceof Error ? error.message : String(error)}`);
     }
-    setAudioPlaybackAllowed(room.canPlaybackAudio);
+    noteAudioPlayback(room.canPlaybackAudio);
     commitSlots((s) => setAudioPlayback(s, room.canPlaybackAudio));
   }
 
@@ -755,6 +801,32 @@ export function ProducerPage() {
           <div className="panel form-panel">
             <h2>Receiver log</h2>
             <pre className="log">{log.length > 0 ? log.join("\n") : "No events yet."}</pre>
+          </div>
+
+          <div className="panel form-panel">
+            <h2>Readiness contract preview</h2>
+            <p className="detail">
+              What this renderer would report to the backend (v3 plan section 5, Readiness row).
+              Renderer {rendererIdRef.current}, generation {rendererGenerationRef.current}. Not yet
+              transmitted; A's control socket is Stage 2.
+            </p>
+            <pre className="log">
+              {readiness
+                ? JSON.stringify(
+                    {
+                      ...readiness,
+                      reportedAtMs: Math.round(readiness.reportedAtMs),
+                      slots: readiness.slots.map((slot) => ({
+                        ...slot,
+                        lastFrameAgeMs:
+                          slot.lastFrameAgeMs === null ? null : Math.round(slot.lastFrameAgeMs),
+                      })),
+                    },
+                    null,
+                    2,
+                  )
+                : "waiting for first tick"}
+            </pre>
           </div>
         </div>
       </section>
