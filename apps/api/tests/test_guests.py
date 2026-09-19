@@ -396,3 +396,64 @@ def test_an_observation_cannot_be_smuggled_in_with_extra_fields(client: TestClie
     response = client.post("/api/v1/vision/observations", headers=HEADERS, json=payload)
 
     assert response.status_code == 422
+
+
+def fixture(name: str) -> dict[str, Any]:
+    return json.loads((FIXTURES / name).read_text("utf-8"))
+
+
+def test_the_enrolment_fixture_is_accepted_verbatim(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/guests",
+        headers=HEADERS,
+        json=fixture("guest-enrolment-request.json"),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["guestId"] == "guest-sarah"
+
+
+def test_a_refused_consent_is_rejected_over_the_wire(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/guests",
+        headers=HEADERS,
+        json=fixture("guest-enrolment-request.consent-refused.json"),
+    )
+
+    assert response.status_code == 403
+    assert client.get("/api/v1/guests", headers=HEADERS, params={"eventId": EVENT}).json()[
+        "guests"
+    ] == []
+
+
+def test_consent_to_filming_alone_is_rejected_over_the_wire(client: TestClient) -> None:
+    response = client.post(
+        "/api/v1/guests",
+        headers=HEADERS,
+        json=fixture("guest-enrolment-request.recording-only.json"),
+    )
+
+    assert response.status_code == 403
+    assert "Live identification" in response.json()["detail"]
+
+
+def test_the_reference_fixture_is_accepted_and_normalised(client: TestClient) -> None:
+    client.post("/api/v1/guests", headers=HEADERS, json=fixture("guest-enrolment-request.json"))
+
+    response = client.post(
+        "/api/v1/guests/guest-sarah/references",
+        headers=HEADERS,
+        json=fixture("reference-submission.json"),
+    )
+
+    assert response.status_code == 201
+    assert response.json()["status"] == "ACTIVE"
+
+    gallery = client.get(
+        "/api/v1/vision/gallery",
+        headers=HEADERS,
+        params={"eventId": EVENT},
+    ).json()
+    vector = gallery["entries"][0]["embeddings"][0]
+    assert sum(value * value for value in vector) == pytest.approx(1.0)
+    assert vector[0] == pytest.approx(0.6)

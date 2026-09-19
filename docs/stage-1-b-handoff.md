@@ -8,7 +8,7 @@ Branch: `codex/b-vision`. Built on A's Stage 0 foundation (`d064a4d`).
 |---|---|---|
 | Shared vision contracts (TS) | `packages/contracts/src/vision.ts` | Observation, guest, consent and snapshot types with runtime parsers |
 | Shared vision contracts (Python) | `apps/api/src/cue_api/guests/contracts.py` | Pydantic mirror, same rules |
-| Cross-language fixtures | `packages/contracts/fixtures/` | Validated by TypeScript, the API and the pipeline |
+| Cross-language fixtures | `packages/contracts/fixtures/` | Observation and full consent lifecycle, validated by TypeScript, the API, the registry and the pipeline |
 | Consent + reference registry | `apps/api/src/cue_api/guests/registry.py` | In-memory, event-scoped, deletion receipts |
 | Observation store | `apps/api/src/cue_api/guests/observations.py` | Latest per camera, epoch-aware, freshness at read time |
 | Guest/vision routes | `apps/api/src/cue_api/guests/router.py` | Enrolment, references, gallery, observations, invalidation, tallies |
@@ -78,7 +78,7 @@ expired. C's own gates still apply on top; B's flag never authorises a cut.
 On this Windows laptop, commit-local:
 
 ```
-cd apps/api    && python -m pytest -q   ->  45 passed
+cd apps/api    && python -m pytest -q   -> 104 passed
 cd apps/api    && python -m ruff check . ->  All checks passed
 cd apps/vision && python -m pytest -q   ->  61 passed
 cd apps/vision && python -m ruff check . ->  All checks passed
@@ -87,9 +87,27 @@ cd apps/vision && python -m ruff check . ->  All checks passed
 Python 3.14.7 on Windows 11.
 
 **Not run here:** `npm run typecheck`, `npm test`, `npm run build`. Node is not
-installed on this machine, so the TypeScript contracts, the new
+installed on this machine, so the TypeScript contracts, the
 `apps/web/src/guests/` tests and the web build are **unverified locally** and
 rest on CI. A or D should run them before merge.
+
+### Consent coverage
+
+The consent path is now tested at three levels, because a consent rule that only
+exists in one of them is not enforced:
+
+- the **contract** (`test_guest_contracts.py`, `consentFixtures.test.ts`) — shape,
+  vocabulary and the lifecycle invariants, on the shared fixture bytes;
+- the **registry** (`test_guest_registry.py`) — 44 cases covering enrolment,
+  ID derivation, reference versioning and normalisation, identifiability, the
+  worker gallery, withdrawal and event purge;
+- the **wire** (`test_guests.py`) — the same fixtures posted verbatim as request
+  bodies, so a fixture that drifts from the API fails rather than rots.
+
+Two fixtures exist specifically to mark the boundary the schema cannot express:
+`guest-enrolment-request.consent-refused.json` and
+`...recording-only.json` both validate cleanly and are both refused by the
+registry with 403. Consenting to be filmed is not consenting to be matched.
 
 **Not run anywhere:** everything involving real pixels. No model weights have
 been downloaded, no OpenCV wheel has been installed, no face has been detected,
