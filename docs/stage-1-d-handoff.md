@@ -46,6 +46,17 @@ sface  face_recognition_sface_2021dec.onnx  0ba9fbfa01b5270c96627c4ef784da859931
 
 The noise-frame run proves the model loads and inference executes on this machine. It proves nothing about detecting a real face; that is B's item 3 with a consenting photo.
 
+### Update after B's PR #5 (vision moved into the API package)
+
+B relocated `apps/vision/src/cue_vision/` to `apps/api/src/cue_api/vision/` and removed the separate package, its pyproject and its CI job. The runtime-gate results above still hold (same OpenCV wheel, same model classes, same files), but the commands changed:
+
+```bash
+cd apps/api && python -m pip install -e ".[dev,vision]"      # OpenCV is now the "vision" extra
+python -m cue_api.vision.cli models --model-dir <dir with the two .onnx files>
+```
+
+The two model files I downloaded live in the git-ignored `apps/vision/models/` on D's Mac; move or re-download them to wherever B's `models.py` expects (default `models/` relative to the working directory). The digests are unchanged. Re-verified on the merged tree: `cue_api.vision` imports with OpenCV present and the API test suite passes.
+
 ## 3b. Producer pairing panel (on top of A's Stage 1 admission)
 
 Merged `codex/person-a-stage-1` (1309f27) into this branch with no conflicts. `apps/web/src/producer/PairingPanel.tsx` uses A's `pairingApi.ts` unchanged:
