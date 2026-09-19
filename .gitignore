@@ -17,3 +17,6 @@ __pycache__/
 Thumbs.db
 recordings/
 artifacts/
+
+# C-lane: semantic evaluation results are per-run artifacts, not source.
+scripts/results_*.json

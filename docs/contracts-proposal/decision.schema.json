@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cue.local/schemas/decision.schema.json",
+  "title": "Decision",
+  "description": "C-lane proposal to A for packages/contracts. Output of services/api/policy/director.decide(). A Decision is what the compositor should render (or the reason it should not). The policy is pure: the caller supplies clock, cameras and prior state; the Decision is derivable from those.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["action", "camera_id", "reason"],
+  "$defs": {
+    "DecisionAction": {
+      "type": "string",
+      "enum": ["TAKE", "STAY", "SLATE"],
+      "description": "TAKE: cut to camera_id. STAY: keep whatever is live. SLATE: no healthy source; render slate card."
+    }
+  },
+  "properties": {
+    "action": {"$ref": "#/$defs/DecisionAction"},
+    "camera_id": {
+      "type": ["string", "null"],
+      "description": "Target camera for TAKE/STAY. Null when action is SLATE."
+    },
+    "reason": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Short human-readable reason. Always non-empty. Surfaced to the producer log; not the model's chain-of-thought."
+    }
+  },
+  "examples": [
+    {
+      "_fixture": "take_named_guest",
+      "action": "TAKE",
+      "camera_id": "CAM-GUEST",
+      "reason": "fresh identity sarah on CAM-GUEST (age 0.40s)"
+    },
+    {
+      "_fixture": "stay_manual_hold",
+      "action": "STAY",
+      "camera_id": "CAM-HOST",
+      "reason": "manual HOLD"
+    },
+    {
+      "_fixture": "take_wide_fallback",
+      "action": "TAKE",
+      "camera_id": "CAM-WIDE",
+      "reason": "target sarah unusable -> wide"
+    },
+    {
+      "_fixture": "slate",
+      "action": "SLATE",
+      "camera_id": null,
+      "reason": "target sarah unusable; no healthy wide -> slate"
+    }
+  ]
+}
