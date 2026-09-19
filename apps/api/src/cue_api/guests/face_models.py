@@ -2,7 +2,7 @@
 
 Checksums start empty on purpose. A fabricated digest is worse than none: it
 would pass a review and prove nothing. B records the digest of the file actually
-downloaded, pins it here and in `docs/vision-models.md`, and from then on every
+downloaded, pins it here and in `docs/b-stage-0.md`, and from then on every
 machine verifies against that pin.
 """
 

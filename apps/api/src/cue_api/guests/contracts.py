@@ -1,6 +1,6 @@
 """Person B — guest consent and visual observation contracts.
 
-Mirrors `packages/contracts/src/vision.ts`. Both runtimes validate the fixtures
+Mirrors `packages/contracts/src/guests.ts`. Both runtimes validate the fixtures
 in `packages/contracts/fixtures/`; a rule that only one side enforces is not a
 shared contract.
 """
@@ -14,7 +14,7 @@ from pydantic import ConfigDict, Field, model_validator
 
 from cue_api.contracts import CameraId, ContractModel
 
-VISION_CONTRACT_VERSION = "0.1.0"
+GUEST_CONTRACT_VERSION = "0.1.0"
 
 #: PRD starting value. Measure and tune; this is not a proven outcome.
 IDENTITY_TTL_MS = 1500
@@ -140,7 +140,7 @@ class ObservationTiming(StrictContractModel):
 
 
 class VisualObservation(StrictContractModel):
-    vision_contract_version: Literal["0.1.0"] = VISION_CONTRACT_VERSION
+    guest_contract_version: Literal["0.1.0"] = GUEST_CONTRACT_VERSION
     observation_id: str = Field(min_length=1, max_length=128)
     event_id: str = Field(min_length=3, max_length=48, pattern=r"^[a-z0-9][a-z0-9-]*$")
     camera_id: CameraId
@@ -185,7 +185,7 @@ class GuestConsent(StrictContractModel):
 class GuestRecord(StrictContractModel):
     """The public view of a guest. Reference embeddings never appear here."""
 
-    vision_contract_version: Literal["0.1.0"] = VISION_CONTRACT_VERSION
+    guest_contract_version: Literal["0.1.0"] = GUEST_CONTRACT_VERSION
     guest_id: str
     event_id: str
     display_name: str
@@ -242,14 +242,14 @@ class GalleryEntry(ContractModel):
 
 
 class GalleryResponse(ContractModel):
-    vision_contract_version: Literal["0.1.0"] = VISION_CONTRACT_VERSION
+    guest_contract_version: Literal["0.1.0"] = GUEST_CONTRACT_VERSION
     event_id: str
     gallery_version: int
     entries: list[GalleryEntry]
 
 
 class GuestListResponse(ContractModel):
-    vision_contract_version: Literal["0.1.0"] = VISION_CONTRACT_VERSION
+    guest_contract_version: Literal["0.1.0"] = GUEST_CONTRACT_VERSION
     event_id: str
     gallery_version: int
     guests: list[GuestRecord]
@@ -273,7 +273,7 @@ class CameraObservationView(ContractModel):
 
 
 class ObservationSnapshot(ContractModel):
-    vision_contract_version: Literal["0.1.0"] = VISION_CONTRACT_VERSION
+    guest_contract_version: Literal["0.1.0"] = GUEST_CONTRACT_VERSION
     event_id: str
     now_ms: int
     gallery_version: int

@@ -1,5 +1,5 @@
 {
-  "visionContractVersion": "0.1.0",
+  "guestContractVersion": "0.1.0",
   "observationId": "obs-cam-guest-3-4822",
   "eventId": "hackmit-demo",
   "cameraId": "CAM-GUEST",

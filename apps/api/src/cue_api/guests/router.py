@@ -149,7 +149,7 @@ def build_guest_router(
             purged_at_ms=clock(),
         )
 
-    @router.get("/vision/gallery", response_model=GalleryResponse)
+    @router.get("/guests/gallery", response_model=GalleryResponse)
     def read_gallery(event_id: str = EVENT_ID_QUERY) -> GalleryResponse:
         """Worker-only. Carries embeddings, so it never reaches a browser."""
         gallery_version, entries = registry.gallery(event_id)

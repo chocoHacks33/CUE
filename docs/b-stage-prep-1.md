@@ -5,7 +5,7 @@ tested before any camera or model exists. Same shape as C's Stage 1 prep
 (`apps/api/src/cue_api/speech/` with its Deepgram fixtures) — pure logic, driven
 by fixture bytes, no hardware.
 
-Branch: `codex/b-vision-clean` (PR #7).
+Branch: `codex/b-stage-1`.
 
 ## What it is
 
@@ -54,11 +54,11 @@ keeping fixtures for the gap stops anyone assuming validation is authorisation.
 `calibrationStatus`, `calibratedConfidence`, `margin`, `similarity`,
 `runnerUpGuestId`, `consecutiveConfirmations`, `trackKey`, `pipelineVersion`.
 
-These are contract surface for Stage 2/3. They are defined here on purpose — the
-contract is the thing Stage 1 prep delivers — but **no code on this branch
+These are contract surface for later work. They are defined here on purpose —
+the contract is the thing Stage 1 prep delivers — but **no code on this branch
 produces an observation**, so C should treat the observation half as
 contract-only for now. `calibratedConfidence` can only ever be
-`PROVISIONAL_DEFAULT` until Stage 3 fits a real calibration.
+`PROVISIONAL_DEFAULT` until someone fits a real calibration.
 
 ## Tests
 
@@ -67,7 +67,7 @@ contract-only for now. `calibratedConfidence` can only ever be
 | `apps/api/tests/test_guest_contracts.py` | 26 |
 | `apps/web/src/guests/guestContract.test.ts` | fixture parsing + named-take gate |
 | `apps/web/src/guests/consentFixtures.test.ts` | consent, enrolment, reference and purge fixtures |
-| `packages/contracts/src/vision.test.ts` | the rules, on inline equivalents |
+| `packages/contracts/src/guests.test.ts` | the rules, on inline equivalents |
 
 ## Verified
 

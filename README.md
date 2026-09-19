@@ -44,13 +44,12 @@ Camera access works on `localhost` or HTTPS. A different laptop cannot use D's `
 
 `CAM-GUEST` is video only. Identifying anyone on it is opt-in and event-scoped:
 references live in memory on D's Mac, are deleted on withdrawal or at event end,
-and an unknown face stays unknown. See [docs/guest-privacy.md](docs/guest-privacy.md)
-and [docs/vision-models.md](docs/vision-models.md).
+and an unknown face stays unknown.
 
 Person B's scope is Stage 0, Stage 1 prep and Stage 1 — one document each:
 
-- [docs/b-stage-0.md](docs/b-stage-0.md) — model weight/licence check, consent roster
-- [docs/b-prep-stage-1.md](docs/b-prep-stage-1.md) — contracts and cross-language fixtures
+- [docs/b-stage-0.md](docs/b-stage-0.md) — model weights and licences, consent roster, privacy behaviour
+- [docs/b-stage-prep-1.md](docs/b-stage-prep-1.md) — contracts and cross-language fixtures
 - [docs/b-stage-1.md](docs/b-stage-1.md) — video-only capture, enrolment/reference module, feed to the Mac
 
 ```bash

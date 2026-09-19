@@ -62,7 +62,7 @@ class ReferenceGallery:
 
     @classmethod
     def from_payload(cls, payload: Mapping[str, object]) -> ReferenceGallery:
-        """Build from the backend's `/api/v1/vision/gallery` response."""
+        """Build from the backend's `/api/v1/guests/gallery` response."""
         raw_entries = payload.get("entries")
         if not isinstance(raw_entries, Iterable):
             raise ValueError("Gallery payload is missing its entries")

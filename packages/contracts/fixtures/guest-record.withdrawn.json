@@ -1,5 +1,5 @@
 {
-  "visionContractVersion": "0.1.0",
+  "guestContractVersion": "0.1.0",
   "guestId": "guest-sarah",
   "eventId": "hackmit-demo",
   "displayName": "Sarah",

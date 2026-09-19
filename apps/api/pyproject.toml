@@ -17,9 +17,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# B's vision core is pure Python on purpose, so OpenCV stays optional and the
-# backend still installs and tests on a machine without a native wheel.
-vision = [
+# B's face-capture core is pure Python on purpose, so OpenCV stays optional and
+# the backend still installs and tests on a machine without a native wheel.
+opencv = [
   "numpy>=1.26,<3",
   "opencv-python>=4.10,<5",
 ]

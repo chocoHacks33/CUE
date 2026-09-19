@@ -26,14 +26,14 @@ class BackendError(RuntimeError):
         self.detail = detail
 
 
-class VisionBackendClient:
+class GuestBackendClient:
     def __init__(self, base_url: str, operator_secret: str, timeout: float = 5.0) -> None:
         self._base_url = base_url.rstrip("/")
         self._secret = operator_secret
         self._timeout = timeout
 
     def fetch_gallery(self, event_id: str) -> ReferenceGallery:
-        payload = self._request("GET", "/api/v1/vision/gallery", query={"eventId": event_id})
+        payload = self._request("GET", "/api/v1/guests/gallery", query={"eventId": event_id})
         return ReferenceGallery.from_payload(payload)
 
     def enrol_guest(

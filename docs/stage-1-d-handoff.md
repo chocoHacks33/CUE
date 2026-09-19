@@ -37,7 +37,7 @@ Actually run on the Mac, in `apps/api/.venv`:
 | Model files downloaded to git-ignored `apps/vision/models/` from opencv_zoo raw URLs | PASS: real binaries, not LFS pointers. YuNet 232,589 bytes; SFace 38,696,353 bytes |
 | `YuNetDetector(model_dir=models).detect()` on a synthetic 1280x720 noise frame | PASS: 0 faces (expected), 1,586 ms cold including model load, 20 ms warm; `SFaceEmbedder` constructs |
 
-Digests from `python -m cue_vision.cli models --model-dir models` on this Mac. B owns pinning them into `models.py` and `docs/vision-models.md` and verifying the licences; I did not edit B's files.
+Digests from `python -m cue_vision.cli models --model-dir models` on this Mac. B owns pinning them into `face_models.py` and `docs/b-stage-0.md` and verifying the licences; I did not edit B's files.
 
 ```
 yunet  face_detection_yunet_2023mar.onnx    8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4

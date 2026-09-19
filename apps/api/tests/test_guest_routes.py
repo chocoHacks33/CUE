@@ -77,7 +77,7 @@ def enrolled_sarah(client: TestClient) -> str:
 
 def test_guest_routes_require_the_operator_credential(client: TestClient) -> None:
     assert client.get("/api/v1/guests", params={"eventId": EVENT}).status_code == 401
-    assert client.get("/api/v1/vision/gallery", params={"eventId": EVENT}).status_code == 401
+    assert client.get("/api/v1/guests/gallery", params={"eventId": EVENT}).status_code == 401
 
 
 def test_enrolment_without_consent_is_refused(client: TestClient) -> None:
@@ -148,7 +148,7 @@ def test_the_worker_gallery_only_holds_consenting_active_guests(client: TestClie
     enrolled_sarah(client)
     enrol(client, name="Daniel")  # enrolled, but no reference yet
 
-    gallery = client.get("/api/v1/vision/gallery", headers=HEADERS, params={"eventId": EVENT})
+    gallery = client.get("/api/v1/guests/gallery", headers=HEADERS, params={"eventId": EVENT})
     body = gallery.json()
 
     assert [entry["guestId"] for entry in body["entries"]] == ["guest-sarah"]
@@ -172,7 +172,7 @@ def test_withdrawal_deletes_the_references_and_reports_what_went(client: TestCli
     assert guest["guests"][0]["consent"]["granted"] is False
     assert guest["guests"][0]["referenceCount"] == 0
 
-    gallery = client.get("/api/v1/vision/gallery", headers=HEADERS, params={"eventId": EVENT})
+    gallery = client.get("/api/v1/guests/gallery", headers=HEADERS, params={"eventId": EVENT})
     assert gallery.json()["entries"] == []
 
 
@@ -273,7 +273,7 @@ def test_the_reference_fixture_is_accepted_and_normalised(client: TestClient) ->
     assert response.json()["status"] == "ACTIVE"
 
     gallery = client.get(
-        "/api/v1/vision/gallery",
+        "/api/v1/guests/gallery",
         headers=HEADERS,
         params={"eventId": EVENT},
     ).json()
