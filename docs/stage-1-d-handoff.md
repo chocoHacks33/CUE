@@ -46,6 +46,17 @@ sface  face_recognition_sface_2021dec.onnx  0ba9fbfa01b5270c96627c4ef784da859931
 
 The noise-frame run proves the model loads and inference executes on this machine. It proves nothing about detecting a real face; that is B's item 3 with a consenting photo.
 
+## 3b. Producer pairing panel (on top of A's Stage 1 admission)
+
+Merged `codex/person-a-stage-1` (1309f27) into this branch with no conflicts. `apps/web/src/producer/PairingPanel.tsx` uses A's `pairingApi.ts` unchanged:
+
+- Producer secret is typed into the panel, held in component state only, sent as `X-CUE-Producer-Secret`. It never goes into a token, URL or the publisher form.
+- Per camera slot: mint a single-use pairing token, show the verification code, copy the token to send to the operator, show the authoritative binding (participant identity, device session, stream epoch, current video SID) once the exchange completes.
+- Claims list polls every 2 s while a secret is entered. Pending claims first. Approve only after checking the code on the physical laptop matches; Reject otherwise. Status changes go to the receiver log.
+- Pure helpers with tests in `pairingView.ts`.
+
+Flow for the physical test: D mints CAM-HOST token, sends only the token to A. A claims; both screens show the same code. D approves. A previews and publishes. The CAM-HOST tile binds by metadata as before, now with the device session ID present.
+
 ## 4. Not run, needs teammates
 
 | Item | Needs |

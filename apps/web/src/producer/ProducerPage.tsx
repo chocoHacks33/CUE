@@ -15,6 +15,7 @@ import type {
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { RecordingTest } from "../recording/RecordingTest";
+import { PairingPanel } from "./PairingPanel";
 import { buildReadiness } from "./readiness";
 import { requestReceiverToken } from "./receiverApi";
 import {
@@ -693,6 +694,8 @@ export function ProducerPage() {
               {detail}
             </p>
           </div>
+
+          <PairingPanel apiBaseUrl={apiBaseUrl} eventId={eventId} onLog={appendLog} />
 
           <div className="panel form-panel">
             <h2>Master audio</h2>

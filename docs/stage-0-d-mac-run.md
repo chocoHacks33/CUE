@@ -73,11 +73,15 @@ Tunnel notes from this venue, 2026-09-19: cloudflared is blocked (port 7844). ng
 4. If "Browser playback" says blocked, click **Enable audio playback**.
 5. Put on headphones. Mute the monitor if the room has speakers; that never affects the received track.
 
-## What A does
+## What A does (Stage 1 pairing, replaces the shared secret for publishers)
 
-1. On Windows, `npm run dev:web`, open `http://localhost:5173/`.
-2. Camera source `CAM-HOST`, event ID `hackmit-demo`, Mac API URL set to D's current `https://....ngrok-free.dev`, same bootstrap secret.
-3. Test local preview, then Publish.
+1. D, on the producer page: enter the producer secret (from this Mac's `.env`, `CUE_PRODUCER_SECRET`), click **Mint pairing token** on CAM-HOST, click **Copy token**, send A the token only.
+2. A on Windows: `npm run dev:web`, open `http://localhost:5173/`, set Mac API URL to D's `https://....ngrok-free.dev`, paste the pairing token, enter display name and device label, submit the claim. A's page shows a verification code.
+3. D: the claim appears in the panel with the same code. Look at A's physical laptop, confirm the code matches, click **Approve**.
+4. A: Test local preview, then Publish. A's page exchanges the approved claim for a one-time media token.
+5. D: the CAM-HOST slot shows "bound" with A's device session and epoch, and the preview tile binds by metadata as before.
+
+Tokens expire in 2 minutes and are single use. A second claim for an occupied slot fails closed. The old Stage 0 publisher-token path still exists but new publishers use pairing.
 
 ## What "pass" looks like on the Mac
 
