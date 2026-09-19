@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from cue_api.vision.types import DecodedFrame, FaceDetection, PixelBox
+from cue_api.guests.types import DecodedFrame, FaceDetection, PixelBox
 
 
 @dataclass(frozen=True)

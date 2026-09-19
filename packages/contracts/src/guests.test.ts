@@ -6,14 +6,14 @@ import {
   parseVisualObservation,
   supportsNamedTake,
   type VisualObservation,
-} from "./vision";
+} from "./guests";
 
 const OBSERVED_AT = 1758294000185;
 
 /**
  * Mirrors `packages/contracts/fixtures/visual-observation.confirmed.json`.
  * The fixture bytes themselves are parsed in
- * `apps/web/src/guests/visionContract.test.ts`; these cases exercise the rules.
+ * `apps/web/src/guests/guestContract.test.ts`; these cases exercise the rules.
  */
 function confirmedObservation(): Record<string, unknown> {
   return {
@@ -46,7 +46,7 @@ function confirmedObservation(): Record<string, unknown> {
       consecutiveConfirmations: 3,
     },
     provenance: {
-      pipelineVersion: "cue-vision/0.1.0",
+      pipelineVersion: "cue-guests/0.1.0",
       detector: "opencv-yunet",
       detectorVersion: "2023mar",
       embedder: "opencv-sface",

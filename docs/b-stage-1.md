@@ -21,11 +21,11 @@ One master mic, on the host camera. B's camera can never restart master audio.
 
 | File | What it does |
 |---|---|
-| `apps/api/src/cue_api/vision/quality.py` | Capture-quality gate: refuses a face instead of matching it weakly |
-| `apps/api/src/cue_api/vision/gallery.py` | Enrolled reference gallery; embeddings are plain float tuples, no numpy in the core |
-| `apps/api/src/cue_api/vision/cli.py` | `cue-vision models / enrol / gallery / forget` |
-| `apps/api/src/cue_api/vision/client.py` | stdlib `urllib` client, so the worker gains no dependency |
-| `apps/api/src/cue_api/vision/types.py` | `DecodedFrame`, `FaceDetection`, `PixelBox`, `Embedding` |
+| `apps/api/src/cue_api/guests/capture_quality.py` | Capture-quality gate: refuses a face instead of matching it weakly |
+| `apps/api/src/cue_api/guests/reference_gallery.py` | Enrolled reference gallery; embeddings are plain float tuples, no numpy in the core |
+| `apps/api/src/cue_api/guests/enrolment_cli.py` | `cue-guests models / enrol / gallery / forget` |
+| `apps/api/src/cue_api/guests/backend_client.py` | stdlib `urllib` client, so the worker gains no dependency |
+| `apps/api/src/cue_api/guests/types.py` | `DecodedFrame`, `FaceDetection`, `PixelBox`, `Embedding` |
 | `apps/api/src/cue_api/guests/router.py` | The routes below |
 
 ### Routes
@@ -45,12 +45,12 @@ are Stage 2.
 
 ### Enrolment keeps the photo where it is
 
-`cue-vision enrol` prints the spoken consent script, computes the embedding
+`cue-guests enrol` prints the spoken consent script, computes the embedding
 locally, and sends only the embedding. The reference image never travels.
 
 ### The quality gate's thresholds
 
-In `quality.py`, all unmeasured on our actual cameras: face width ratio 0.08,
+In `capture_quality.py`, all unmeasured on our actual cameras: face width ratio 0.08,
 detector score 0.70, sharpness 0.25, brightness 0.20–0.92, max out-of-frame
 0.02. The sharpness scale (Laplacian variance / 500) was chosen without looking
 at a real webcam frame and should be expected to need retuning.
@@ -71,8 +71,8 @@ Three checks, all outstanding:
 | File | Tests |
 |---|---|
 | `apps/api/tests/test_guest_routes.py` | 16 |
-| `apps/api/tests/test_vision_gallery.py` | 12 |
-| `apps/api/tests/test_vision_quality.py` | 8 |
+| `apps/api/tests/test_guest_reference_gallery.py` | 12 |
+| `apps/api/tests/test_guest_capture_quality.py` | 8 |
 | `apps/web/src/publisher/mediaPolicy.test.ts` | capture constraints per camera |
 
 ## Verified
@@ -82,7 +82,7 @@ Windows 11, Python 3.14.7:
 ```
 cd apps/api && python -m pytest -q     ->  182 passed (whole backend suite)
 cd apps/api && python -m ruff check .  ->  All checks passed
-cue-vision --help                      ->  entry point resolves
+cue-guests --help                      ->  entry point resolves
 OpenAPI route dump                     ->  6 guest/vision routes, no observation endpoints
 ```
 
@@ -118,7 +118,7 @@ because there is no store to drop from yet.
    passes.
 2. **Download and pin the weights** — procedure in `docs/vision-models.md`,
    including verifying the licences rather than trusting the table.
-3. **First real inference on the Mac** — one photo through `cue-vision enrol`,
+3. **First real inference on the Mac** — one photo through `cue-guests enrol`,
    one live frame through `YuNetDetector`.
 4. **B's media checks** — `docs/results/b-media-check.template.md`.
 5. **Only then** unpark Stage 2.

@@ -32,7 +32,7 @@
     "consecutiveConfirmations": 3
   },
   "provenance": {
-    "pipelineVersion": "cue-vision/0.1.0",
+    "pipelineVersion": "cue-guests/0.1.0",
     "detector": "opencv-yunet",
     "detectorVersion": "2023mar",
     "embedder": "opencv-sface",

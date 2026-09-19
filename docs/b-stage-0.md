@@ -9,13 +9,13 @@ Branch: `codex/b-vision-clean` (PR #7).
 
 | File | What it does |
 |---|---|
-| `apps/api/src/cue_api/vision/models.py` | Model registry: filenames, sources, licences, SHA-256 slots, `verify()` at load time |
-| `apps/api/src/cue_api/vision/adapters/opencv_models.py` | YuNet detector + SFace embedder, OpenCV imported lazily. **Never executed** |
+| `apps/api/src/cue_api/guests/face_models.py` | Model registry: filenames, sources, licences, SHA-256 slots, `verify()` at load time |
+| `apps/api/src/cue_api/guests/adapters/opencv_models.py` | YuNet detector + SFace embedder, OpenCV imported lazily. **Never executed** |
 | `docs/vision-models.md` | Where the weights come from, their licences, and the pinning procedure |
 
 **Checksums are deliberately empty.** A digest written from memory would pass
 review and prove nothing, so `expected_sha256` stays unset and
-`tests/test_vision_models.py` asserts that nothing is pinned until someone
+`tests/test_guest_face_models.py` asserts that nothing is pinned until someone
 downloads a file and records what they actually got. The doc and the code
 cannot drift apart.
 
@@ -59,7 +59,7 @@ must declare `PROVISIONAL_DEFAULT` rather than implying a measured number.
 | File | Tests |
 |---|---|
 | `apps/api/tests/test_guest_registry.py` | 44 |
-| `apps/api/tests/test_vision_models.py` | 6 |
+| `apps/api/tests/test_guest_face_models.py` | 6 |
 
 ## Verified
 

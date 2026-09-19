@@ -1,7 +1,7 @@
 # Guest identity: consent, storage and deletion
 
 Owner: Person B. This describes what the code in `apps/api/src/cue_api/guests/`
-and `apps/api/src/cue_api/vision/` actually does today, not an intention.
+and `apps/api/src/cue_api/guests/` actually does today, not an intention.
 
 ## What we ask for, and when
 
@@ -10,7 +10,7 @@ enrolment. `POST /api/v1/guests` refuses an enrolment where `consentGranted` is
 false, and refuses one that omits the `LIVE_IDENTIFICATION` purpose, so a guest
 who agreed only to be recorded cannot be matched by face.
 
-The spoken consent script, printed by `cue-vision enrol` before it will do
+The spoken consent script, printed by `cue-guests enrol` before it will do
 anything:
 
 > Consent recorded for: live identification during this event, local recording

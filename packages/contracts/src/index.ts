@@ -312,6 +312,6 @@ export function isDecodedAudioDescriptor(value: unknown): value is DecodedAudioD
   );
 }
 
-export * from "./vision";
+export * from "./guests";
 
 export * from "./readiness";

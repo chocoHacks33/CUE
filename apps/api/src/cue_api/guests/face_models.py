@@ -25,7 +25,7 @@ class ModelFile:
     #: Upstream licence as published. Confirm against the file you downloaded.
     declared_licence: str
     licence_verified: bool
-    #: Fill in from `cue-vision models --record` once the file is downloaded.
+    #: Fill in from `cue-guests models --record` once the file is downloaded.
     expected_sha256: str | None = None
 
     def path(self, model_dir: Path = DEFAULT_MODEL_DIR) -> Path:

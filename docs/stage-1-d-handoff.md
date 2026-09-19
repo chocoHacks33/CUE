@@ -48,14 +48,14 @@ The noise-frame run proves the model loads and inference executes on this machin
 
 ### Update after B's PR #5 (vision moved into the API package)
 
-B relocated `apps/vision/src/cue_vision/` to `apps/api/src/cue_api/vision/` and removed the separate package, its pyproject and its CI job. The runtime-gate results above still hold (same OpenCV wheel, same model classes, same files), but the commands changed:
+B relocated `apps/vision/src/cue_vision/` into `apps/api/src/cue_api/guests/` and removed the separate package, its pyproject and its CI job. The runtime-gate results above still hold (same OpenCV wheel, same model classes, same files), but the commands changed:
 
 ```bash
 cd apps/api && python -m pip install -e ".[dev,vision]"      # OpenCV is now the "vision" extra
-python -m cue_api.vision.cli models --model-dir <dir with the two .onnx files>
+python -m cue_api.guests.enrolment_cli models --model-dir <dir with the two .onnx files>
 ```
 
-The two model files I downloaded live in the git-ignored `apps/vision/models/` on D's Mac; move or re-download them to wherever B's `models.py` expects (default `models/` relative to the working directory). The digests are unchanged. Re-verified on the merged tree: `cue_api.vision` imports with OpenCV present and the API test suite passes.
+The two model files I downloaded live in the git-ignored `apps/vision/models/` on D's Mac; move or re-download them to wherever B's `face_models.py` expects (default `models/` relative to the working directory). The digests are unchanged. Re-verified on the merged tree: B's vision core imports with OpenCV present and the API test suite passes. (B has since renamed it to `cue_api.guests`; the wheel, model classes and digests are unchanged.)
 
 ## 3b. Producer pairing panel (on top of A's Stage 1 admission)
 
