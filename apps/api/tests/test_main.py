@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 
 import jwt
+import pytest
 from fastapi.testclient import TestClient
 
 from cue_api.contracts import CameraId, ReceiverRole
@@ -40,7 +41,12 @@ def configured_settings() -> Settings:
     )
 
 
-def test_health_distinguishes_liveness_from_readiness() -> None:
+def test_health_distinguishes_liveness_from_readiness(monkeypatch: pytest.MonkeyPatch) -> None:
+    # cue_api.semantics.parser calls load_dotenv() at import time (test_director imports it),
+    # so on a machine with a real .env the credentials leak into os.environ and this
+    # "unconfigured" app would report ready. Clear them so the test is hermetic.
+    for name in ("LIVEKIT_URL", "LIVEKIT_API_KEY", "LIVEKIT_API_SECRET", "CUE_BOOTSTRAP_SECRET"):
+        monkeypatch.delenv(name, raising=False)
     client = TestClient(create_app(settings=Settings(_env_file=None)))
 
     live = client.get("/health/live")
@@ -111,6 +117,26 @@ def test_livekit_grants_enforce_camera_specific_audio_policy() -> None:
     metadata = json.loads(host_claims["metadata"])
     assert metadata["cameraId"] == "CAM-HOST"
     assert metadata["streamEpoch"] == 1
+
+
+def test_stage1_livekit_token_carries_authoritative_session_binding() -> None:
+    issuer = LiveKitPublisherTokenIssuer(configured_settings())
+
+    issued = issuer.issue(
+        "hackmit-demo",
+        CameraId.HOST,
+        "Person A",
+        participant_identity="publisher:hackmit-demo:CAM-HOST:session123",
+        stream_epoch=3,
+        device_session_id="session123",
+    )
+    claims = jwt.decode(issued.token, options={"verify_signature": False})
+    metadata = json.loads(claims["metadata"])
+
+    assert claims["sub"] == "publisher:hackmit-demo:CAM-HOST:session123"
+    assert metadata["cameraId"] == "CAM-HOST"
+    assert metadata["streamEpoch"] == 3
+    assert metadata["deviceSessionId"] == "session123"
 
 
 def test_invalid_event_slug_is_rejected_before_issuer() -> None:

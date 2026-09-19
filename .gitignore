@@ -24,3 +24,13 @@ scripts/results_*.json
 # Vision model weights: downloaded per machine, never committed.
 models/
 *.onnx
+
+# Person D's local planning notes. Not team deliverables; kept out of the repo on purpose.
+AGENTS.md
+/CUE_HackMIT_2026_Plan_v3_Laptop_Cameras_Mac_Server.md
+docs/past_winners.md
+docs/sponsor_challenges_2026.md
+docs/hackmit_prizes_2026.md
+docs/D_role_guide.md
+docs/CUE_Product_Requirements_condensed.md
+docs/results/d-media-check.md

@@ -447,3 +447,57 @@ footer {
     grid-template-columns: 1fr;
   }
 }
+
+/* ---- Stage 1 pairing panel ---- */
+
+.pairing-slots {
+  display: grid;
+  gap: 12px;
+}
+
+.verify-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #a9ffea;
+}
+
+.token {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.claims {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.claim {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #28314b;
+  border-radius: 12px;
+  padding: 12px;
+  background: #0a0f1d;
+  font-size: 0.85rem;
+}
+
+.claim-pending {
+  border-color: rgba(255, 196, 77, 0.5);
+}
+
+.claim-exchanged,
+.claim-approved {
+  border-color: rgba(56, 224, 158, 0.35);
+}
+
+.claim-rejected,
+.claim-expired {
+  opacity: 0.6;
+}

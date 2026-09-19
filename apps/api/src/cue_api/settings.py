@@ -13,16 +13,24 @@ class Settings(BaseSettings):
     livekit_api_key: str = ""
     livekit_api_secret: SecretStr = SecretStr("")
     cue_bootstrap_secret: SecretStr = SecretStr("")
+    cue_producer_secret: SecretStr = SecretStr("")
     cue_token_ttl_minutes: int = Field(default=10, ge=1, le=60)
+    cue_pairing_ttl_seconds: int = Field(default=120, ge=30, le=600)
+    cue_claim_ttl_seconds: int = Field(default=300, ge=60, le=900)
     cue_cors_origins: str = "http://localhost:5173"
 
     @property
     def livekit_configured(self) -> bool:
         return bool(
-            self.livekit_url
-            and self.livekit_api_key
-            and self.livekit_api_secret.get_secret_value()
-            and self.cue_bootstrap_secret.get_secret_value()
+            self.livekit_url and self.livekit_api_key and self.livekit_api_secret.get_secret_value()
+        )
+
+    @property
+    def producer_secret(self) -> str:
+        """Stage 1 producer credential, with a temporary Stage 0 migration fallback."""
+        return (
+            self.cue_producer_secret.get_secret_value()
+            or self.cue_bootstrap_secret.get_secret_value()
         )
 
     @property
