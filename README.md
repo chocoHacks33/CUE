@@ -73,6 +73,8 @@ See [docs/stage-0-a-handoff.md](docs/stage-0-a-handoff.md) for the A-to-D live p
 
 Person A's Stage 1 protocol, frame/PCM contracts and physical handoff are in [docs/stage-1-a-handoff.md](docs/stage-1-a-handoff.md).
 
+Person A's independent Stage 2 control/health/worker preliminaries are documented in [docs/stage-2-a-prep-handoff.md](docs/stage-2-a-prep-handoff.md). They remain fixture-only until the Stage 1 physical integration gate passes.
+
 ## Producer receiver (Person D's Mac)
 
 `/producer` on the same web app is the subscribe-only Stage 0 receiver. It requests a credential from `POST /api/v1/stage0/receiver-token` (same Stage 0 secret, `canPublish: false`), joins the same room, and binds `CAM-HOST`, `CAM-GUEST` and `CAM-WIDE` tiles from each participant's server-set metadata. Only `CAM-HOST`'s microphone is played. The Mac never publishes.

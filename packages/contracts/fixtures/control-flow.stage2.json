@@ -1,0 +1,41 @@
+{
+  "fixtureOnly": true,
+  "description": "Synthetic Stage 2 handshake. This is not evidence of a live camera cut.",
+  "eventId": "fixture-stage2",
+  "initialState": {
+    "eventId": "fixture-stage2",
+    "controlGeneration": "fixture-generation-1",
+    "mode": "ASSIST",
+    "modeRevision": 4,
+    "decisionSequence": 10,
+    "liveCameraId": "CAM-HOST",
+    "liveStreamEpoch": 2,
+    "pendingDecisionId": null
+  },
+  "take": {
+    "cameraId": "CAM-GUEST",
+    "streamEpoch": 3,
+    "expectedRevision": 4,
+    "idempotencyKey": "fixture-take-001",
+    "reasonCode": "FIXTURE_CONFIRMED_GUEST"
+  },
+  "expectedCommand": {
+    "decisionSequence": 11,
+    "modeRevision": 5,
+    "cameraId": "CAM-GUEST",
+    "streamEpoch": 3
+  },
+  "expectedAfterAck": {
+    "liveCameraId": "CAM-GUEST",
+    "liveStreamEpoch": 3,
+    "pendingDecisionId": null
+  },
+  "mustReject": [
+    "acknowledgement from another control generation",
+    "acknowledgement after a newer manual action",
+    "acknowledgement for another camera or stream epoch",
+    "expired render command",
+    "control message sent by an OBSERVER"
+  ]
+}
+
