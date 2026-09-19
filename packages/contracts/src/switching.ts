@@ -10,6 +10,9 @@ import { type CameraId, isCameraId } from "./index";
 export const SWITCHING_CONTRACT_VERSION = "0.1.0" as const;
 
 export const SLATE = "SLATE" as const;
+
+/** Control generation used for decisions the renderer issues itself. The backend uses opaque strings. */
+export const LOCAL_GENERATION = "local" as const;
 export type ProgramSource = CameraId | typeof SLATE;
 
 export function isProgramSource(value: unknown): value is ProgramSource {
@@ -36,6 +39,7 @@ export const DECISION_REASONS = [
   "FAILOVER_SAFE",
   "FAILOVER_SLATE",
   "FAILOVER_RECOVER",
+  "ACK_TIMEOUT_REVERT",
   "POLICY_INTRODUCE_GUEST",
   "POLICY_HANDOFF",
   "POLICY_RETURN_HOST",
@@ -43,16 +47,20 @@ export const DECISION_REASONS = [
   "POLICY_DEMO",
   "POLICY_REACTION",
 ] as const;
-export type DecisionReason = (typeof DECISION_REASONS)[number];
+export type KnownDecisionReason = (typeof DECISION_REASONS)[number];
+/** Reason codes are open strings on the wire (the backend and policy add their own); the list above is what the renderer itself emits. */
+export type DecisionReason = string;
 
 export type DecisionClockDomain = "renderer-monotonic" | "backend";
 
 export interface ShotDecision {
   contractVersion: typeof SWITCHING_CONTRACT_VERSION;
   eventId: string;
-  /** Monotonic within a control generation. Generation 0 is the renderer's own local issuance. */
+  /** Monotonic within a control generation. LOCAL_GENERATION is the renderer's own issuance. */
   sequence: number;
-  controlGeneration: number;
+  controlGeneration: string;
+  /** The backend's decision id when the decision came over the control socket; null for local ones. */
+  issuerDecisionId: string | null;
   /** Mode revision the issuer computed against. If the operator acted since, this is stale. */
   modeRevision: number;
   origin: DecisionOrigin;
@@ -84,16 +92,19 @@ export const REJECT_REASONS = [
   "ALREADY_ON_AIR",
   "MIN_SHOT_DURATION",
   "SUPERSEDED",
+  "ACK_TIMEOUT",
 ] as const;
 export type RejectReason = (typeof REJECT_REASONS)[number];
 
-export type AckOutcome = "APPLIED" | "REJECTED";
+/** FAILED: the decision was accepted but the source never drew a frame in time. */
+export type AckOutcome = "APPLIED" | "REJECTED" | "FAILED";
 
 export interface RenderAck {
   contractVersion: typeof SWITCHING_CONTRACT_VERSION;
   eventId: string;
   decisionSequence: number;
-  controlGeneration: number;
+  controlGeneration: string;
+  issuerDecisionId: string | null;
   rendererId: string;
   rendererGeneration: number;
   outcome: AckOutcome;
@@ -117,11 +128,12 @@ export function isShotDecision(value: unknown): value is ShotDecision {
   if (!isRecord(value)) return false;
   if (value.contractVersion !== SWITCHING_CONTRACT_VERSION) return false;
   if (typeof value.eventId !== "string" || typeof value.sequence !== "number") return false;
-  if (typeof value.controlGeneration !== "number" || typeof value.modeRevision !== "number") return false;
+  if (typeof value.controlGeneration !== "string" || typeof value.modeRevision !== "number") return false;
+  if (value.issuerDecisionId !== null && typeof value.issuerDecisionId !== "string") return false;
   if (!DECISION_ORIGINS.includes(value.origin as DecisionOrigin)) return false;
   if (!isProgramSource(value.target)) return false;
   if (value.targetStreamEpoch !== null && typeof value.targetStreamEpoch !== "number") return false;
-  if (!DECISION_REASONS.includes(value.reason as DecisionReason)) return false;
+  if (typeof value.reason !== "string" || value.reason.length === 0) return false;
   if (value.evidence !== null && typeof value.evidence !== "string") return false;
   if (value.clockDomain !== "renderer-monotonic" && value.clockDomain !== "backend") return false;
   return typeof value.createdAtMs === "number" && typeof value.expiresAtMs === "number";
@@ -131,9 +143,10 @@ export function isRenderAck(value: unknown): value is RenderAck {
   if (!isRecord(value)) return false;
   if (value.contractVersion !== SWITCHING_CONTRACT_VERSION) return false;
   if (typeof value.eventId !== "string" || typeof value.decisionSequence !== "number") return false;
-  if (typeof value.controlGeneration !== "number") return false;
+  if (typeof value.controlGeneration !== "string") return false;
+  if (value.issuerDecisionId !== null && typeof value.issuerDecisionId !== "string") return false;
   if (typeof value.rendererId !== "string" || typeof value.rendererGeneration !== "number") return false;
-  if (value.outcome !== "APPLIED" && value.outcome !== "REJECTED") return false;
+  if (value.outcome !== "APPLIED" && value.outcome !== "REJECTED" && value.outcome !== "FAILED") return false;
   if (value.rejectReason !== null && !REJECT_REASONS.includes(value.rejectReason as RejectReason)) {
     return false;
   }
