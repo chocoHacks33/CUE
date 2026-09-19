@@ -1,6 +1,7 @@
 import {
   CAMERA_IDS,
   type CameraId,
+  type ProgramSource,
   READINESS_CONTRACT_VERSION,
   type ReceiverReadiness,
   type SlotReadiness,
@@ -16,8 +17,8 @@ export interface ReadinessContext {
   connected: boolean;
   audioPlaybackAllowed: boolean;
   audioAttached: boolean;
-  /** Null until the Stage 2 compositor draws a source. */
-  currentSource: CameraId | null;
+  /** What the compositor is drawing: a camera, "SLATE", or null before it starts. */
+  currentSource: ProgramSource | null;
 }
 
 /**

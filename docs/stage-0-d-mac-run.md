@@ -98,6 +98,20 @@ Maps one to one onto A's verification list.
 
 Then run the **Recording test** with `CAM-HOST + master audio`: Start, wait 30 to 60 s while A speaks a marker and waves, Stop, play inline, Download, and play the file in QuickTime or VLC. Record the real container (expected `video/webm;codecs=vp8,opus`), duration and outcome in the results file.
 
+## Stage 2 controls (compositor)
+
+On the producer page, top of the right column. Keys work only when no input has focus.
+
+| Control | Key | Effect |
+|---|---|---|
+| TAKE CAM-HOST / CAM-GUEST / CAM-WIDE | 1 / 2 / 3 | Hard cut to that camera if it is renderable now. Tally goes red on the first drawn frame |
+| SLATE | 0 | Static safe picture, always allowed |
+| HOLD | H | Freeze against policy decisions; press again to release to ASSIST. Health failover keeps working |
+| Enable AUTO | button only | Lets validated policy decisions execute. Nothing resumes AUTO on its own |
+| Start / Stop programme recording | buttons | Canvas plus master audio, chunks persisted as they arrive; download with the real container extension |
+
+If the on-air camera stops delivering frames for 1.5 s the compositor cuts to the wide view, then host, then guest, whichever has been healthy for 2 s, else the slate. Details: `docs/stage-2-d-handoff.md`.
+
 ## Troubleshooting
 
 | Symptom | Likely cause |
