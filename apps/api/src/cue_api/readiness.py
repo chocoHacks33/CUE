@@ -69,7 +69,9 @@ class ReceiverReadiness(ContractModel):
     connected: bool
     clock_domain: str
     reported_at_ms: float = Field(ge=0)
-    current_source: CameraId | None = None
+    # A camera, "SLATE" once D's compositor is on the safe picture, or null before it starts.
+    # Mirrors packages/contracts/src/readiness.ts, which A's browser client validates with.
+    current_source: CameraId | Literal["SLATE"] | None = None
     master_audio: MasterAudioReadiness
     slots: list[SlotReadiness]
 

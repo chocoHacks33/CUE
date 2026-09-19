@@ -13,7 +13,7 @@ from cue_api.media_contracts import (
     PcmContinuityGuard,
     PixelFormat,
 )
-from cue_api.vision.types import DecodedFrame
+from cue_api.guests.types import DecodedFrame
 
 
 @dataclass(frozen=True)
