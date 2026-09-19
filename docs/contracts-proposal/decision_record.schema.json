@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cue.local/schemas/decision_record.schema.json",
+  "title": "DecisionRecord",
+  "description": "C-lane proposal to A for packages/contracts. Append-only log entry produced for every SessionDecision (AI or manual). One JSON object per line in the decision log (see apps/api/src/cue_api/policy/log.py). Only observable evidence: transcript span, cue summary, cameras considered, latencies. Never carries the model's chain-of-thought.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["at", "decision_seq", "mode_revision", "action", "camera_id", "reason"],
+  "$defs": {
+    "Action": {"type": "string", "enum": ["TAKE", "STAY", "SLATE"]},
+    "TranscriptSpan": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "utterance_id": {"type": "string"},
+        "text": {"type": "string"},
+        "started_at": {"type": ["number", "null"]},
+        "ended_at": {"type": ["number", "null"]}
+      }
+    },
+    "CueSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "target_guest_ids": {"type": "array", "items": {"type": "string"}},
+        "scope": {"type": "string"},
+        "temporal_intent": {"type": "string"},
+        "action_pre_validate": {"type": "string"}
+      }
+    },
+    "CameraConsideration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["camera_id", "role", "healthy", "picked"],
+      "properties": {
+        "camera_id": {"type": "string"},
+        "role": {"type": "string"},
+        "healthy": {"type": "boolean"},
+        "guest_ready": {"type": ["boolean", "null"]},
+        "evidence_age_s": {"type": ["number", "null"]},
+        "picked": {"type": "boolean"},
+        "rejection_reason": {"type": ["string", "null"]}
+      }
+    }
+  },
+  "properties": {
+    "at": {"type": "number", "description": "Producer clock seconds when the decision was recorded."},
+    "decision_seq": {"type": "integer", "minimum": 1},
+    "mode_revision": {"type": "integer", "minimum": 0},
+    "action": {"$ref": "#/$defs/Action"},
+    "camera_id": {"type": ["string", "null"]},
+    "reason": {"type": "string", "minLength": 1},
+    "transcript_span": {"anyOf": [{"$ref": "#/$defs/TranscriptSpan"}, {"type": "null"}]},
+    "cue_summary":     {"anyOf": [{"$ref": "#/$defs/CueSummary"},     {"type": "null"}]},
+    "cameras_considered": {"type": "array", "items": {"$ref": "#/$defs/CameraConsideration"}},
+    "latencies_ms": {
+      "type": "object",
+      "description": "Wall-clock latencies in milliseconds. Expected keys: asr (speech->transcript), cue (transcript->cue), decide (cue->decision), total.",
+      "additionalProperties": {"type": "number"}
+    },
+    "source": {
+      "type": "string",
+      "enum": ["LIVE", "FIXTURE"],
+      "default": "LIVE",
+      "description": "Provenance marker. Fixture replays (scripts/fixture_cues.py) always emit 'FIXTURE' so downstream readers cannot confuse a scripted line with a live one."
+    }
+  },
+  "examples": [
+    {
+      "_fixture": "future_mention_stay",
+      "at": 1000.2,
+      "decision_seq": 1,
+      "mode_revision": 0,
+      "action": "STAY",
+      "camera_id": "CAM-HOST",
+      "reason": "temporal_intent=FUTURE, not NOW",
+      "transcript_span": {
+        "utterance_id": "utt-1",
+        "text": "Sarah joins us after the break.",
+        "started_at": null,
+        "ended_at": 1000.2
+      },
+      "cue_summary": {
+        "target_guest_ids": ["sarah"],
+        "scope": "single",
+        "temporal_intent": "FUTURE",
+        "action_pre_validate": "HOLD"
+      },
+      "cameras_considered": [
+        {"camera_id": "CAM-HOST",  "role": "host",  "healthy": true, "guest_ready": true, "evidence_age_s": 999.0, "picked": false},
+        {"camera_id": "CAM-GUEST", "role": "guest", "healthy": true, "guest_ready": true, "evidence_age_s":   0.4, "picked": false},
+        {"camera_id": "CAM-WIDE",  "role": "wide",  "healthy": true, "guest_ready": true, "evidence_age_s": 999.0, "picked": false}
+      ],
+      "latencies_ms": {"asr": 320, "cue": 850, "decide": 1, "total": 1171},
+      "source": "FIXTURE"
+    },
+    {
+      "_fixture": "named_take_role_based",
+      "at": 1003.2,
+      "decision_seq": 2,
+      "mode_revision": 0,
+      "action": "TAKE",
+      "camera_id": "CAM-GUEST",
+      "reason": "role_based: sarah -> CAM-GUEST",
+      "transcript_span": {
+        "utterance_id": "utt-2",
+        "text": "Please welcome Sarah Tan.",
+        "started_at": null,
+        "ended_at": 1003.2
+      },
+      "cue_summary": {
+        "target_guest_ids": ["sarah"],
+        "scope": "single",
+        "temporal_intent": "NOW",
+        "action_pre_validate": "SHOW"
+      },
+      "cameras_considered": [
+        {"camera_id": "CAM-HOST",  "role": "host",  "healthy": true, "guest_ready": true, "evidence_age_s": 999.0, "picked": false},
+        {"camera_id": "CAM-GUEST", "role": "guest", "healthy": true, "guest_ready": true, "evidence_age_s":   0.4, "picked": true},
+        {"camera_id": "CAM-WIDE",  "role": "wide",  "healthy": true, "guest_ready": true, "evidence_age_s": 999.0, "picked": false}
+      ],
+      "latencies_ms": {"asr": 305, "cue": 820, "decide": 1, "total": 1126},
+      "source": "FIXTURE"
+    },
+    {
+      "_fixture": "manual_hold",
+      "at": 1006.9,
+      "decision_seq": 4,
+      "mode_revision": 1,
+      "action": "STAY",
+      "camera_id": "CAM-WIDE",
+      "reason": "manual HOLD",
+      "transcript_span": null,
+      "cue_summary": null,
+      "cameras_considered": [],
+      "latencies_ms": {"decide": 0, "total": 0},
+      "source": "FIXTURE"
+    },
+    {
+      "_fixture": "late_cue_stale_mode_revision",
+      "at": 1006.95,
+      "decision_seq": 5,
+      "mode_revision": 1,
+      "action": "STAY",
+      "camera_id": "CAM-WIDE",
+      "reason": "cue from stale mode_revision 0 (current 1)",
+      "transcript_span": {
+        "utterance_id": "utt-4",
+        "text": "Sarah, come up.",
+        "started_at": null,
+        "ended_at": 1006.95
+      },
+      "cue_summary": {
+        "target_guest_ids": ["sarah"],
+        "scope": "single",
+        "temporal_intent": "NOW",
+        "action_pre_validate": "SHOW"
+      },
+      "cameras_considered": [
+        {"camera_id": "CAM-HOST",  "role": "host",  "healthy": true, "guest_ready": true, "evidence_age_s": 999.0, "picked": false},
+        {"camera_id": "CAM-GUEST", "role": "guest", "healthy": true, "guest_ready": true, "evidence_age_s":   0.4, "picked": false},
+        {"camera_id": "CAM-WIDE",  "role": "wide",  "healthy": true, "guest_ready": true, "evidence_age_s": 999.0, "picked": false}
+      ],
+      "latencies_ms": {"asr": 305, "cue": 5200, "decide": 0, "total": 5505},
+      "source": "FIXTURE"
+    }
+  ]
+}
