@@ -13,7 +13,7 @@ import urllib.request
 from collections.abc import Sequence
 from typing import Any
 
-from cue_vision.gallery import ReferenceGallery
+from cue_api.vision.gallery import ReferenceGallery
 
 OPERATOR_HEADER = "X-CUE-Bootstrap-Secret"
 

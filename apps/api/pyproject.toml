@@ -17,11 +17,20 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# B's vision core is pure Python on purpose, so OpenCV stays optional and the
+# backend still installs and tests on a machine without a native wheel.
+vision = [
+  "numpy>=1.26,<3",
+  "opencv-python>=4.10,<5",
+]
 dev = [
   "httpx>=0.28,<1",
   "pytest>=8.4,<9",
   "ruff>=0.12,<1",
 ]
+
+[project.scripts]
+cue-vision = "cue_api.vision.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

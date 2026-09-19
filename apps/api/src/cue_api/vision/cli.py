@@ -12,10 +12,10 @@ import sys
 import time
 from pathlib import Path
 
-from cue_vision.client import BackendError, VisionBackendClient
-from cue_vision.models import DEFAULT_MODEL_DIR, MODEL_FILES, status_report
-from cue_vision.quality import QualityPolicy, assess
-from cue_vision.types import DecodedFrame
+from cue_api.vision.client import BackendError, VisionBackendClient
+from cue_api.vision.models import DEFAULT_MODEL_DIR, MODEL_FILES, status_report
+from cue_api.vision.quality import QualityPolicy, assess
+from cue_api.vision.types import DecodedFrame
 
 CONSENT_PROMPT = (
     "Consent recorded for: live identification during this event, local recording and "
@@ -40,7 +40,7 @@ def _models_command(args: argparse.Namespace) -> int:
             )
     if unpinned:
         print(
-            "note: paste these sha256 values into cue_vision/models.py and "
+            "note: paste these sha256 values into cue_api.vision/models.py and "
             "docs/vision-models.md to pin them",
             file=sys.stderr,
         )
@@ -54,7 +54,7 @@ def _load_reference(image_path: Path, model_dir: Path) -> tuple[list[float], flo
     """Detect, quality-check and embed one reference photo."""
     import cv2  # noqa: PLC0415 - enrolment is the one CLI path that needs OpenCV
 
-    from cue_vision.adapters.opencv_models import SFaceEmbedder, YuNetDetector
+    from cue_api.vision.adapters.opencv_models import SFaceEmbedder, YuNetDetector
 
     image = cv2.imread(str(image_path))
     if image is None:
