@@ -1,8 +1,54 @@
+"""Capture-quality gate tests for cue_api.vision.quality.
+
+The frames and detections here are deterministic stand-ins, not recognition.
+They cover the policy around the models; real YuNet/SFace behaviour is only
+established by the Mac runtime check in `docs/results/b-identity-report.template.md`.
+"""
+
 from __future__ import annotations
 
-from conftest import make_detection, make_frame
+from cue_api.vision.quality import QualityPolicy, assess
+from cue_api.vision.types import DecodedFrame, FaceDetection, PixelBox
 
-from cue_vision.quality import QualityPolicy, assess
+FRAME_WIDTH = 1280
+FRAME_HEIGHT = 720
+
+
+def make_frame(
+    *,
+    camera_id: str = "CAM-GUEST",
+    stream_epoch: int = 1,
+    sequence: int = 0,
+    received_at_ms: int = 1_000_000,
+) -> DecodedFrame:
+    return DecodedFrame(
+        camera_id=camera_id,
+        stream_epoch=stream_epoch,
+        sequence=sequence,
+        width=FRAME_WIDTH,
+        height=FRAME_HEIGHT,
+        received_at_ms=received_at_ms,
+        captured_at_ms=received_at_ms - 40,
+    )
+
+
+def make_detection(
+    *,
+    x: float = 500,
+    y: float = 200,
+    width: float = 200,
+    height: float = 240,
+    score: float = 0.95,
+    sharpness: float = 0.8,
+    brightness: float = 0.55,
+) -> FaceDetection:
+    return FaceDetection(
+        box=PixelBox(x=x, y=y, width=width, height=height),
+        score=score,
+        sharpness=sharpness,
+        brightness=brightness,
+        landmarks=tuple((x + width / 2, y + height / 2) for _ in range(5)),
+    )
 
 
 def test_a_well_framed_face_passes() -> None:

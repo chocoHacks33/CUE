@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from cue_vision.models import (
+from cue_api.vision.models import (
     MODEL_FILES,
     SFACE,
     YUNET,

@@ -1,7 +1,7 @@
 # Guest identity: consent, storage and deletion
 
 Owner: Person B. This describes what the code in `apps/api/src/cue_api/guests/`
-and `apps/vision/` actually does today, not an intention.
+and `apps/api/src/cue_api/vision/` actually does today, not an intention.
 
 ## What we ask for, and when
 

@@ -68,17 +68,6 @@ class PixelBox:
     def area(self) -> float:
         return max(0.0, self.width) * max(0.0, self.height)
 
-    def intersection_over_union(self, other: PixelBox) -> float:
-        left = max(self.x, other.x)
-        top = max(self.y, other.y)
-        right = min(self.x + self.width, other.x + other.width)
-        bottom = min(self.y + self.height, other.y + other.height)
-        if right <= left or bottom <= top:
-            return 0.0
-        overlap = (right - left) * (bottom - top)
-        union = self.area + other.area - overlap
-        return overlap / union if union > 0 else 0.0
-
     def normalised(self, frame_width: int, frame_height: int) -> dict[str, float]:
         def clamp(value: float) -> float:
             return min(1.0, max(0.0, value))
