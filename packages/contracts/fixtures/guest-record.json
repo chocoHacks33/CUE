@@ -1,0 +1,21 @@
+{
+  "visionContractVersion": "0.1.0",
+  "guestId": "guest-sarah",
+  "eventId": "hackmit-demo",
+  "displayName": "Sarah",
+  "aliases": ["Sarah L"],
+  "status": "ACTIVE",
+  "consent": {
+    "granted": true,
+    "grantedAtMs": 1758293400000,
+    "scope": "EVENT",
+    "purposes": ["LIVE_IDENTIFICATION", "RECORDING", "CLOUD_RELAY"],
+    "withdrawnAtMs": null,
+    "recordedBy": "B"
+  },
+  "referenceVersion": 2,
+  "referenceCount": 3,
+  "meanReferenceQuality": 0.79,
+  "storage": "MEMORY_ONLY",
+  "updatedAtMs": 1758293460000
+}

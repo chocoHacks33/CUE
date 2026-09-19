@@ -36,3 +36,12 @@ jobs:
         working-directory: apps/api
       - run: python -m ruff check .
         working-directory: apps/api
+
+      # Person B's vision core installs without OpenCV on purpose: the pure
+      # policy layer has to build and test on all four machines.
+      - run: python -m pip install -e ".[dev]"
+        working-directory: apps/vision
+      - run: python -m pytest -q
+        working-directory: apps/vision
+      - run: python -m ruff check .
+        working-directory: apps/vision
