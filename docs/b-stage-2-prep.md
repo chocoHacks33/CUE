@@ -124,5 +124,7 @@ works** — it establishes that the policy around it abstains when it should.
    in front of another on the same camera can swap tracks. The confirmation reset
    limits that to a lost identity rather than a wrong one, but it is not solved.
 
+The live wiring that drives all of this is [b-stage-2.md](b-stage-2.md).
+
 Earlier stages: [b-stage-0.md](b-stage-0.md),
 [b-stage-prep-1.md](b-stage-prep-1.md), [b-stage-1.md](b-stage-1.md).

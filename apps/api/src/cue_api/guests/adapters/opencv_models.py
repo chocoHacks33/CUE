@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from cue_api.guests.face_models import DEFAULT_MODEL_DIR, SFACE, YUNET, verify
+from cue_api.guests.frame_intake import FramePayload
 from cue_api.guests.types import DecodedFrame, Embedding, FaceDetection, PixelBox
 
 
@@ -36,7 +37,21 @@ def _require_image(frame: DecodedFrame) -> Any:
         raise ValueError(
             "Frames must be delivered upright; rotate in ingest so one owner handles orientation"
         )
+    if isinstance(frame.image, FramePayload):
+        return _payload_to_array(frame.image)
     return frame.image
+
+
+def _payload_to_array(payload: FramePayload) -> Any:
+    """A `FramePayload` as the writable, contiguous BGR array OpenCV expects.
+
+    `frombuffer` returns a read-only view, so this copies: OpenCV writes into the
+    buffers it is handed during alignment.
+    """
+    import numpy  # noqa: PLC0415 - only needed on the live inference path
+
+    flat = numpy.frombuffer(payload.packed_bytes(), dtype=numpy.uint8)
+    return flat.reshape(payload.height, payload.width, 3).copy()
 
 
 class YuNetDetector:

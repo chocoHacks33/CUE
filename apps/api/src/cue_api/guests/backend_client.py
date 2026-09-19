@@ -2,7 +2,7 @@
 
 Stdlib only, so the worker gains no extra dependency for the sake of a handful
 of HTTP calls. Reference images never travel: only the embedding computed
-locally does. Posting observations is Stage 2 and is not here yet.
+locally does.
 """
 
 from __future__ import annotations
@@ -35,6 +35,28 @@ class GuestBackendClient:
     def fetch_gallery(self, event_id: str) -> ReferenceGallery:
         payload = self._request("GET", "/api/v1/guests/gallery", query={"eventId": event_id})
         return ReferenceGallery.from_payload(payload)
+
+    def post_observation(self, observation: dict[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/api/v1/guests/observations", body=observation)
+
+    def invalidate(
+        self,
+        *,
+        event_id: str,
+        camera_id: str,
+        current_stream_epoch: int,
+        reason: str,
+    ) -> dict[str, Any]:
+        return self._request(
+            "POST",
+            "/api/v1/guests/invalidate",
+            body={
+                "eventId": event_id,
+                "cameraId": camera_id,
+                "currentStreamEpoch": current_stream_epoch,
+                "reason": reason,
+            },
+        )
 
     def enrol_guest(
         self,

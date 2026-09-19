@@ -9,6 +9,8 @@ Stage 0/1 scope, one package:
   reference_gallery.py  enrolled references as plain float tuples
   enrolment_cli.py      the cue-guests command
   backend_client.py     stdlib HTTP client for that command
+  frame_intake.py       A's decoded frames -> B's frames, with a clock mapping
+  observation_worker.py the live loop: frames in, observations posted
   observation_store.py  latest observation per camera, epoch-aware
   observation_pipeline.py  frame in, observations out
   face_matching.py      gallery matching with a real abstention
