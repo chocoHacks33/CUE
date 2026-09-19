@@ -33,7 +33,32 @@ from cue_api.guests.face_matching import (
 )
 from cue_api.guests.identity_eval import LabelledPair, NegativeTrial, PositiveTrial
 from cue_api.guests.reference_gallery import ReferenceGallery, cosine_similarity, normalise
-from cue_api.guests.types import DecodedFrame, Embedding, FaceDetection
+from cue_api.guests.types import (
+    DecodedFrame,
+    Embedding,
+    FaceDetection,
+    ObservationStatus,
+)
+
+
+def status_for(decision: MatchDecision) -> ObservationStatus:
+    """A match decision as the status the rest of the system speaks.
+
+    `MatchDecision` is the matcher's internal vocabulary; `ObservationStatus` is
+    what the contract, the producer UI and the identity report use. Leaking
+    CANDIDATE or EMPTY_GALLERY into a trials document would put words in the
+    report that appear nowhere else in the system.
+
+    A single frame maps CANDIDATE to PROVISIONAL, never CONFIRMED, because one
+    frame is not an identity — the same rule the ledger enforces live.
+    """
+    if decision is MatchDecision.AMBIGUOUS:
+        return ObservationStatus.AMBIGUOUS
+    if decision is MatchDecision.CANDIDATE:
+        return ObservationStatus.PROVISIONAL
+    # UNKNOWN and EMPTY_GALLERY both mean "nobody was named", which is what
+    # `observation_pipeline` reports as UNKNOWN too.
+    return ObservationStatus.UNKNOWN
 
 
 class FaceDetector(Protocol):
@@ -124,6 +149,15 @@ def run_captures(
     ledger. Whether repeated agreement confirms is already covered by the pipeline
     tests, and mixing the two here would hide which one a failure came from.
     """
+    # Validate every label first: discovering a bad one after scoring fifty
+    # captures through a real model would throw away all of that work.
+    for capture in captures:
+        if capture.guest_id is not None and gallery.get(capture.guest_id) is None:
+            raise ValueError(
+                f"{capture.label} is labelled as {capture.guest_id}, who is not in the "
+                "gallery; enrol them first or relabel the capture"
+            )
+
     results = TrialResults()
 
     for capture in captures:
@@ -146,7 +180,7 @@ def run_captures(
         embedding = normalise(embedder.embed(capture.frame, detection))
         outcome = match(embedding, gallery, thresholds)
         named = outcome.guest_id if outcome.decision is MatchDecision.CANDIDATE else None
-        status = outcome.decision.value
+        status = status_for(outcome.decision).value
 
         if capture.guest_id is not None:
             results.positives.append(
@@ -191,9 +225,6 @@ def _similarity_against(
     higher.
     """
     guest = gallery.get(guest_id)
-    if guest is None:
-        raise ValueError(
-            f"Capture is labelled as {guest_id}, who is not in the gallery; "
-            "enrol them first or relabel the capture"
-        )
+    if guest is None:  # pragma: no cover - run_captures validates labels up front
+        raise ValueError(f"{guest_id} is not in the gallery")
     return max(cosine_similarity(embedding, reference) for reference in guest.embeddings)

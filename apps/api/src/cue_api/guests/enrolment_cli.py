@@ -265,6 +265,13 @@ def _calibrate_command(args: argparse.Namespace) -> int:
     return 0
 
 
+class CaptureUnreadable(ValueError):
+    """OpenCV could not decode the capture file."""
+
+    def __init__(self, path: str) -> None:
+        super().__init__(f"cannot read {path}; is it an image OpenCV can decode?")
+
+
 def _trials_command(args: argparse.Namespace) -> int:
     """Score labelled capture files into the document `evaluate` reads.
 
@@ -274,14 +281,18 @@ def _trials_command(args: argparse.Namespace) -> int:
     import cv2  # noqa: PLC0415 - scoring real captures needs OpenCV
 
     from cue_api.guests.adapters.opencv_models import SFaceEmbedder, YuNetDetector
-    from cue_api.guests.backend_client import GuestBackendClient
+    from cue_api.guests.backend_client import BackendError, GuestBackendClient
     from cue_api.guests.trial_runner import Capture, run_captures
     from cue_api.guests.types import DecodedFrame
 
     model_dir = Path(args.model_dir)
     detector = YuNetDetector(model_dir=model_dir)
     embedder = SFaceEmbedder(model_dir=model_dir)
-    gallery = GuestBackendClient(args.api, args.secret).fetch_gallery(args.event)
+    try:
+        gallery = GuestBackendClient(args.api, args.secret).fetch_gallery(args.event)
+    except BackendError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
 
     captures: list[Capture] = []
     for entry in args.positive:
@@ -289,15 +300,28 @@ def _trials_command(args: argparse.Namespace) -> int:
         if not guest_id or not image_path:
             print(f"error: --positive expects guestId=path, received {entry!r}", file=sys.stderr)
             return 1
-        captures.append(_load_capture(cv2, DecodedFrame, Capture, image_path, guest_id))
+        try:
+            captures.append(_load_capture(cv2, DecodedFrame, Capture, image_path, guest_id))
+        except CaptureUnreadable as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
     for image_path in args.negative:
-        captures.append(_load_capture(cv2, DecodedFrame, Capture, image_path, None))
+        try:
+            captures.append(_load_capture(cv2, DecodedFrame, Capture, image_path, None))
+        except CaptureUnreadable as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
 
     if not captures:
         print("error: no captures given", file=sys.stderr)
         return 1
 
-    results = run_captures(captures, gallery, detector, embedder)
+    try:
+        results = run_captures(captures, gallery, detector, embedder)
+    except ValueError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+
     document = json.dumps(results.to_document(), indent=2) + chr(10)
     Path(args.out).write_text(document, "utf-8")
 
@@ -316,7 +340,7 @@ def _trials_command(args: argparse.Namespace) -> int:
 def _load_capture(cv2, decoded_frame, capture_type, image_path: str, guest_id: str | None):
     image = cv2.imread(image_path)
     if image is None:
-        raise SystemExit(f"error: cannot read {image_path}")
+        raise CaptureUnreadable(image_path)
     height, width = image.shape[:2]
     frame = decoded_frame(
         camera_id="CAM-GUEST",
@@ -327,7 +351,9 @@ def _load_capture(cv2, decoded_frame, capture_type, image_path: str, guest_id: s
         received_at_ms=int(time.time() * 1000),
         image=image,
     )
-    return capture_type(label=Path(image_path).name, frame=frame, guest_id=guest_id)
+    # The path as given, not just the basename: two strangers in different
+    # directories must not collapse into one subject in the report.
+    return capture_type(label=image_path, frame=frame, guest_id=guest_id)
 
 
 def build_parser() -> argparse.ArgumentParser:

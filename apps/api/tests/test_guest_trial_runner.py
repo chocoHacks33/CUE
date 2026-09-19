@@ -66,6 +66,8 @@ def test_a_matching_positive_capture_is_named_and_paired() -> None:
     assert trial.named_guest_id == "guest-sarah"
     assert trial.correct
     assert not trial.wrong_person
+    # A single frame is never CONFIRMED, however good the match.
+    assert trial.status == "PROVISIONAL"
     assert results.pairs == [results.pairs[0]]
     assert results.pairs[0].same_person is True
     assert results.pairs[0].similarity == pytest.approx(1.0)
@@ -238,6 +240,86 @@ def test_an_empty_gallery_names_nobody_and_records_no_pairs() -> None:
     )
 
     assert results.negatives[0].named_guest_id is None
-    assert results.negatives[0].status == "EMPTY_GALLERY"
+    # EMPTY_GALLERY is the matcher's word; the report speaks ObservationStatus.
+    assert results.negatives[0].status == "UNKNOWN"
     # No guest scored it, so there is no similarity to pair.
     assert results.pairs == []
+
+
+# -- the vocabulary the report speaks --------------------------------------
+
+
+def test_the_matchers_internal_words_never_reach_the_document() -> None:
+    """CANDIDATE and EMPTY_GALLERY appear nowhere else in the system, so they must
+    not appear in a document somebody pastes into the identity report."""
+    from cue_api.guests.face_matching import MatchDecision
+    from cue_api.guests.trial_runner import status_for
+    from cue_api.guests.types import ObservationStatus
+
+    mapped = {decision: status_for(decision) for decision in MatchDecision}
+
+    assert mapped[MatchDecision.CANDIDATE] is ObservationStatus.PROVISIONAL
+    assert mapped[MatchDecision.AMBIGUOUS] is ObservationStatus.AMBIGUOUS
+    assert mapped[MatchDecision.UNKNOWN] is ObservationStatus.UNKNOWN
+    assert mapped[MatchDecision.EMPTY_GALLERY] is ObservationStatus.UNKNOWN
+    # Every decision maps to a real ObservationStatus, so nothing leaks.
+    assert all(isinstance(status, ObservationStatus) for status in mapped.values())
+
+
+def test_every_emitted_status_is_an_observation_status() -> None:
+    detector = detector_for(SARAH_X, STRANGER_X, 999.0)
+    results = run_captures(
+        [
+            Capture("sarah.jpg", make_frame(), "guest-sarah"),
+            Capture("stranger.jpg", make_frame(), None),
+            Capture("near-pair.jpg", make_frame(), None),
+        ],
+        gallery_of_two(),
+        detector,
+        embedder(),
+    )
+
+    from cue_api.guests.types import ObservationStatus
+
+    allowed = {status.value for status in ObservationStatus}
+    emitted = [t.status for t in results.positives] + [t.status for t in results.negatives]
+    assert emitted
+    assert set(emitted) <= allowed
+
+
+# -- labels ----------------------------------------------------------------
+
+
+def test_a_bad_label_is_caught_before_any_capture_is_scored() -> None:
+    """Otherwise fifty captures would go through a real model and then be lost."""
+    detector = detector_for(SARAH_X, SARAH_X)
+
+    with pytest.raises(ValueError, match="not in the gallery"):
+        run_captures(
+            [
+                Capture("good.jpg", make_frame(), "guest-sarah"),
+                Capture("ghost.jpg", make_frame(), "guest-nobody"),
+            ],
+            gallery_of_two(),
+            detector,
+            embedder(),
+        )
+
+    # Nothing was detected, so nothing was scored.
+    assert detector.calls == 0
+
+
+def test_two_strangers_with_the_same_basename_stay_separate_subjects() -> None:
+    """Subjects must be traceable back to a file, so labels cannot collide."""
+    results = run_captures(
+        [
+            Capture("monday/stranger.jpg", make_frame(), None),
+            Capture("tuesday/stranger.jpg", make_frame(), None),
+        ],
+        gallery_of_two(),
+        detector_for(STRANGER_X, STRANGER_X),
+        embedder(),
+    )
+
+    subjects = [trial.subject for trial in results.negatives]
+    assert len(set(subjects)) == 2
