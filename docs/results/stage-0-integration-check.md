@@ -25,12 +25,18 @@ Note: `ruff format --check` reports files that would be reformatted in `apps/api
 
 ## Physical verification (A's items 4 to 6)
 
-| Item | Result | Needs |
+Mac-side rows run by D on 2026-09-19 after the user supplied real LiveKit credentials (stored only in the gitignored `.env`).
+
+| Item | Result | Evidence / needs |
 |---|---|---|
-| Central server starts on the Mac with real config | NOT RUN | `LIVEKIT_API_KEY` and `LIVEKIT_API_SECRET` in D's `.env` (URL and bootstrap secret are set) |
-| Reachable from the three Windows laptops | NOT RUN | ngrok tunnel URL shared privately; A/B/C publisher pages on their laptops |
+| Central server starts on the Mac with real config | PASS | uvicorn on 127.0.0.1:8000, `/health/ready` returns `ready`, `livekitConfigured: true` |
+| API reachable through the tunnel | PASS from the Mac | `GET /health/ready` via the ngrok HTTPS URL with `ngrok-skip-browser-warning` returns `ready`; without the header ngrok returns its HTML interstitial, which is why both API clients send the header. CORS preflight from `http://localhost:5173` with the three request headers returns 200 |
+| Reachable from the three Windows laptops | NOT RUN | A, B, C each open their publisher page and request a token through the tunnel URL |
+| LiveKit Cloud admits a receiver token | PASS | headless `livekit.rtc` join to room `cue-hackmit-demo` with a receiver token minted by the API; joined, 0 remote participants, disconnected cleanly |
+| Token grants correct | PASS | receiver `canPublish: false`, `canSubscribe: true`; CAM-HOST publisher sources `camera, microphone`, `canSubscribe: false`; signature verifies with the configured secret |
+| Web app serves the receiver | PASS | Vite on 5173, `GET /producer` 200 |
 | All three camera feeds connect and stay stable | NOT RUN | A, B, C publishing `CAM-HOST`, `CAM-GUEST`, `CAM-WIDE` |
-| Switching / producer output | NOT RUN, and not in scope of Stage 0 code: the receiver shows three tiles and records one selected slot; the compositor with TAKE/HOLD is Stage 2 in the v3 plan | |
+| Switching / producer output | NOT RUN, and not Stage 0 code: the receiver shows three tiles and records one selected slot; the compositor with TAKE/HOLD is Stage 2 in the v3 plan | |
 | Stage 0 recording on the Mac (Test 2) | NOT RUN | see `docs/stage-0-d-mac-run.md` |
 
-Stage 0 is complete only when the physical rows pass. Until then this commit is "automated checks green on the merged tree", nothing more.
+Stage 0 is complete only when the NOT RUN rows pass with the real laptops. Until then this commit is "server verified on the Mac, feeds pending".
