@@ -17,3 +17,4 @@ __pycache__/
 Thumbs.db
 recordings/
 artifacts/
+tests/**/results_*.json
