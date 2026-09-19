@@ -114,57 +114,14 @@ def _interpret_via_openai(text: str, utt_id: str, created_at: float) -> Cue:
 
 
 def _interpret_via_ollama(text: str, utt_id: str, created_at: float) -> Cue:
-    """Hits Ollama's /api/chat with a JSON Schema derived from Cue.
-
-    Uses the same SYSTEM prompt and validate() as the OpenAI path so
-    semantics stay identical. This function only exists here (dev
-    fallback); parser.py stays OpenAI-only per team decision.
+    """Route through scripts/ollama_parser (fast mode) so booth and bench
+    share the same code path and prompt-prefix cache lookups.
     """
-    from cue_api.semantics.parser import (
-        SYSTEM,
-        Action,
-        Intent,
-        Scope,
-        TemporalIntent,
-        _roster_text,
-        validate,
-    )
-    from cue_api.semantics.parser import (
-        Cue as CueCls,
-    )
-
     if not CUE_MODEL:
         raise RuntimeError("CUE_MODEL is empty but CUE_PROVIDER=ollama")
-
-    schema = CueCls.model_json_schema()
-    payload = {
-        "model": CUE_MODEL,
-        "messages": [
-            {"role": "system", "content": SYSTEM.format(roster=_roster_text())},
-            {"role": "user", "content": f"Latest utterance: {text}"},
-        ],
-        "stream": False,
-        "format": schema,
-        "options": {"temperature": 0.0},
-    }
-    data = json.dumps(payload).encode("utf-8")
-    req = urllib.request.Request(
-        OLLAMA_URL + "/api/chat", data=data,
-        headers={"Content-Type": "application/json"},
-    )
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        result = json.load(resp)
-    content = result.get("message", {}).get("content", "")
-    try:
-        parsed = json.loads(content)
-        cue = CueCls(**parsed)
-        cue = validate(cue)
-    except Exception as e:  # noqa: BLE001 -- defensive: any parse/validate error becomes a safe HOLD
-        cue = CueCls(
-            target_guest_ids=[], scope=Scope.NONE, intent=Intent.NONE,
-            temporal_intent=TemporalIntent.UNCERTAIN, action=Action.HOLD,
-            evidence_text=f"OLLAMA_ERR: {type(e).__name__}",
-        )
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from ollama_parser import parse_via_ollama
+    cue, _ms, _tokens = parse_via_ollama(text, CUE_MODEL, fast=True)
     cue.utterance_id = utt_id
     cue.created_at = created_at
     return cue

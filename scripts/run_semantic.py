@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import statistics
 import sys
 import time
@@ -27,8 +28,35 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 _SRC = REPO_ROOT / "apps" / "api" / "src"
 if _SRC.exists() and str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # for ollama_parser
 
-from cue_api.semantics.parser import parse  # noqa: E402
+# Load .env so CUE_PROVIDER is visible when routing.
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
+
+
+_PROVIDER = os.environ.get("CUE_PROVIDER", "openai").strip().lower()
+
+
+def _make_parse():
+    """Return a parse(text, model) -> (Cue, ms) matching either provider."""
+    if _PROVIDER == "ollama":
+        # Dev-only fallback. Fast mode by default: smaller output schema plus
+        # prompt-prefix caching. Full Cue contract preserved via validate().
+        from ollama_parser import parse_via_ollama
+
+        def _p(text, model):
+            cue, ms, _tokens = parse_via_ollama(text, model, fast=True)
+            return cue, ms
+        return _p
+    from cue_api.semantics.parser import parse as openai_parse
+    return openai_parse
+
+
+parse = _make_parse()
 
 SETS = {
     "dev": "adversarial.json",
@@ -79,8 +107,9 @@ def run(cases, set_name, model, only, repeat):
         "p50_ms": round(statistics.median(lat)) if lat else 0,
         "p95_ms": round(lat[int(0.95 * (len(lat) - 1))]) if lat else 0,
     }
+    safe_model = model.replace("/", "_").replace(":", "_")
     out = (Path(__file__).parent
-           / f"results_{set_name}_{model.replace('/', '_')}_{int(time.time())}.json")
+           / f"results_{set_name}_{safe_model}_{int(time.time())}.json")
     out.write_text(json.dumps({"summary": summary, "rows": rows}, indent=2))
     return summary
 
