@@ -1,0 +1,9 @@
+{
+  "eventId": "hackmit-demo",
+  "guestIds": [
+    "guest-sarah"
+  ],
+  "referencesDeleted": 3,
+  "observationsDropped": 1,
+  "purgedAtMs": 1758295000000
+}

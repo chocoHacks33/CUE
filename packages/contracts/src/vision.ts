@@ -378,8 +378,16 @@ export function parseGuestRecord(value: unknown): GuestRecord {
   const granted = consent.granted;
   if (typeof granted !== "boolean") throw new Error("consent.granted must be a boolean");
   const withdrawnAtMs = asNullableNumber(consent, "withdrawnAtMs", "consent");
-  if (status === "WITHDRAWN" && (granted || withdrawnAtMs === null)) {
-    throw new Error("A withdrawn guest must record the withdrawal and drop consent");
+  const referenceCount = asNumber(root, "referenceCount", "guest");
+  if (status === "WITHDRAWN") {
+    if (granted || withdrawnAtMs === null) {
+      throw new Error("A withdrawn guest must record the withdrawal and drop consent");
+    }
+    // Withdrawal is a deletion, not a flag. A record that still counts
+    // references is describing data the guest asked us to destroy.
+    if (referenceCount !== 0) {
+      throw new Error("A withdrawn guest must hold no references");
+    }
   }
 
   const purposes = asStringArray(consent, "purposes", "consent");
@@ -409,7 +417,7 @@ export function parseGuestRecord(value: unknown): GuestRecord {
       recordedBy: asString(consent, "recordedBy", "consent"),
     },
     referenceVersion: asNumber(root, "referenceVersion", "guest"),
-    referenceCount: asNumber(root, "referenceCount", "guest"),
+    referenceCount,
     meanReferenceQuality: asNullableNumber(root, "meanReferenceQuality", "guest"),
     storage: "MEMORY_ONLY",
     updatedAtMs: asNumber(root, "updatedAtMs", "guest"),
@@ -462,5 +470,129 @@ export function parseObservationSnapshot(value: unknown): ObservationSnapshot {
         ageMs: asNullableNumber(view, "ageMs", "cameras[]"),
       };
     }),
+  };
+}
+
+/**
+ * What an enrolment operator sends. Consent is recorded in the same request
+ * that creates the guest, so there is no window in which a guest exists without
+ * a recorded decision.
+ */
+export interface GuestEnrolmentRequest {
+  eventId: string;
+  displayName: string;
+  aliases: string[];
+  /** Null lets the server derive a stable ID from the display name. */
+  guestId: string | null;
+  consentGranted: boolean;
+  consentPurposes: ConsentPurpose[];
+  recordedBy: string;
+}
+
+/**
+ * One enrolment reference, already reduced to an embedding by the machine that
+ * holds the photo. The photo itself is never uploaded.
+ */
+export interface ReferenceSubmission {
+  eventId: string;
+  embedding: number[];
+  quality: number;
+  embedder: string;
+  embedderVersion: string;
+  capturedAtMs: number;
+}
+
+/** Deletion has to be observable, or it is only a promise. */
+export interface PurgeReceipt {
+  eventId: string;
+  guestIds: string[];
+  referencesDeleted: number;
+  observationsDropped: number;
+  purgedAtMs: number;
+}
+
+/**
+ * True only when this request may actually enrol a face reference.
+ *
+ * The schema cannot express this: a request that refuses consent, or that
+ * consents to filming but not to being matched, is still a well-formed request.
+ * It is a consent decision, so it lives beside the contract rather than inside
+ * it, and the registry enforces the same rule server-side.
+ */
+export function mayEnrolFaceReference(request: GuestEnrolmentRequest): boolean {
+  return request.consentGranted && request.consentPurposes.includes("LIVE_IDENTIFICATION");
+}
+
+export function parseGuestEnrolmentRequest(value: unknown): GuestEnrolmentRequest {
+  const root = asRecord(value, "enrolment");
+
+  const consentGranted = root.consentGranted;
+  if (typeof consentGranted !== "boolean") {
+    throw new Error("enrolment.consentGranted must be a boolean");
+  }
+
+  const purposes = asStringArray(root, "consentPurposes", "enrolment");
+  if (purposes.length === 0) {
+    throw new Error("An enrolment must record at least one consent purpose");
+  }
+  for (const purpose of purposes) {
+    if (!CONSENT_PURPOSES.includes(purpose as ConsentPurpose)) {
+      throw new Error(`Unknown consent purpose: ${purpose}`);
+    }
+  }
+
+  const displayName = asString(root, "displayName", "enrolment");
+  if (displayName.trim() === "") {
+    throw new Error("An enrolment needs a display name");
+  }
+
+  return {
+    eventId: asString(root, "eventId", "enrolment"),
+    displayName,
+    aliases: asStringArray(root, "aliases", "enrolment"),
+    guestId: asNullableString(root, "guestId", "enrolment"),
+    consentGranted,
+    consentPurposes: purposes as ConsentPurpose[],
+    recordedBy: asString(root, "recordedBy", "enrolment"),
+  };
+}
+
+export function parseReferenceSubmission(value: unknown): ReferenceSubmission {
+  const root = asRecord(value, "reference");
+
+  const embedding = root.embedding;
+  if (!Array.isArray(embedding) || embedding.length < 2) {
+    throw new Error("reference.embedding must be an array of at least two numbers");
+  }
+  for (const entry of embedding) {
+    if (typeof entry !== "number" || !Number.isFinite(entry)) {
+      throw new Error("reference.embedding contains a non-finite value");
+    }
+  }
+  if (embedding.every((entry) => entry === 0)) {
+    throw new Error("An embedding with no magnitude cannot be matched");
+  }
+
+  const quality = asNumber(root, "quality", "reference");
+  if (quality < 0 || quality > 1) throw new Error("reference.quality must be 0..1");
+
+  return {
+    eventId: asString(root, "eventId", "reference"),
+    embedding: embedding as number[],
+    quality,
+    embedder: asString(root, "embedder", "reference"),
+    embedderVersion: asString(root, "embedderVersion", "reference"),
+    capturedAtMs: asNumber(root, "capturedAtMs", "reference"),
+  };
+}
+
+export function parsePurgeReceipt(value: unknown): PurgeReceipt {
+  const root = asRecord(value, "receipt");
+  return {
+    eventId: asString(root, "eventId", "receipt"),
+    guestIds: asStringArray(root, "guestIds", "receipt"),
+    referencesDeleted: asNumber(root, "referencesDeleted", "receipt"),
+    observationsDropped: asNumber(root, "observationsDropped", "receipt"),
+    purgedAtMs: asNumber(root, "purgedAtMs", "receipt"),
   };
 }
