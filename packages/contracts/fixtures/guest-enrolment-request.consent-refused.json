@@ -1,0 +1,11 @@
+{
+  "eventId": "hackmit-demo",
+  "displayName": "Someone who said no",
+  "aliases": [],
+  "guestId": null,
+  "consentGranted": false,
+  "consentPurposes": [
+    "LIVE_IDENTIFICATION"
+  ],
+  "recordedBy": "B"
+}

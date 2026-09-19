@@ -1,0 +1,15 @@
+{
+  "eventId": "hackmit-demo",
+  "displayName": "Sarah",
+  "aliases": [
+    "Sarah L"
+  ],
+  "guestId": null,
+  "consentGranted": true,
+  "consentPurposes": [
+    "LIVE_IDENTIFICATION",
+    "RECORDING",
+    "CLOUD_RELAY"
+  ],
+  "recordedBy": "B"
+}

@@ -1,0 +1,25 @@
+{
+  "visionContractVersion": "0.1.0",
+  "guestId": "guest-daniel",
+  "eventId": "hackmit-demo",
+  "displayName": "Daniel",
+  "aliases": [],
+  "status": "ENROLLING",
+  "consent": {
+    "granted": true,
+    "grantedAtMs": 1758293400000,
+    "scope": "EVENT",
+    "purposes": [
+      "LIVE_IDENTIFICATION",
+      "RECORDING",
+      "CLOUD_RELAY"
+    ],
+    "withdrawnAtMs": null,
+    "recordedBy": "B"
+  },
+  "referenceVersion": 0,
+  "referenceCount": 0,
+  "meanReferenceQuality": null,
+  "storage": "MEMORY_ONLY",
+  "updatedAtMs": 1758293400000
+}

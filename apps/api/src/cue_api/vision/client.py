@@ -1,7 +1,8 @@
-"""Thin stdlib client for the guest/observation routes on D's Mac.
+"""Thin stdlib client for the guest enrolment routes on D's Mac.
 
-Stdlib only, so the worker gains no extra dependency for the sake of four HTTP
-calls. Reference images never travel: only the embedding computed locally does.
+Stdlib only, so the worker gains no extra dependency for the sake of a handful
+of HTTP calls. Reference images never travel: only the embedding computed
+locally does. Posting observations is Stage 2 and is not here yet.
 """
 
 from __future__ import annotations
@@ -34,28 +35,6 @@ class VisionBackendClient:
     def fetch_gallery(self, event_id: str) -> ReferenceGallery:
         payload = self._request("GET", "/api/v1/vision/gallery", query={"eventId": event_id})
         return ReferenceGallery.from_payload(payload)
-
-    def post_observation(self, observation: dict[str, Any]) -> dict[str, Any]:
-        return self._request("POST", "/api/v1/vision/observations", body=observation)
-
-    def invalidate(
-        self,
-        *,
-        event_id: str,
-        camera_id: str,
-        current_stream_epoch: int,
-        reason: str,
-    ) -> dict[str, Any]:
-        return self._request(
-            "POST",
-            "/api/v1/vision/invalidate",
-            body={
-                "eventId": event_id,
-                "cameraId": camera_id,
-                "currentStreamEpoch": current_stream_epoch,
-                "reason": reason,
-            },
-        )
 
     def enrol_guest(
         self,

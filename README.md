@@ -46,7 +46,7 @@ Camera access works on `localhost` or HTTPS. A different laptop cannot use D's `
 references live in memory on D's Mac, are deleted on withdrawal or at event end,
 and an unknown face stays unknown. See [docs/guest-privacy.md](docs/guest-privacy.md),
 [docs/vision-models.md](docs/vision-models.md) and
-[docs/stage-1-b-handoff.md](docs/stage-1-b-handoff.md).
+[docs/stage-0-1-b-handoff.md](docs/stage-0-1-b-handoff.md).
 
 ```bash
 python -m pip install -e "apps/api[dev]"           # core, no OpenCV needed

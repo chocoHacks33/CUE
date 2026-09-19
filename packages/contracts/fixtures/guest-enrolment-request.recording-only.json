@@ -1,0 +1,12 @@
+{
+  "eventId": "hackmit-demo",
+  "displayName": "Guest who agreed to be filmed but not matched",
+  "aliases": [],
+  "guestId": null,
+  "consentGranted": true,
+  "consentPurposes": [
+    "RECORDING",
+    "CLOUD_RELAY"
+  ],
+  "recordedBy": "B"
+}
