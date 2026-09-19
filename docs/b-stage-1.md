@@ -86,11 +86,13 @@ OpenAPI route dump                     ->  6 guest routes, no observation endpoi
 ```
 
 **Not run locally:** the npm gates — Node is not installed on this machine.
-CI passes on macOS and Windows for PR #7.
+CI passes on macOS and Windows.
 
-**Not run anywhere:** anything involving real pixels. No weights downloaded, no
-OpenCV wheel installed, no face detected, no camera published. Every test here
-uses scripted fixtures.
+**Not run for Stage 1:** anything involving real pixels. Every test here uses
+scripted fixtures. The weights have since been downloaded and pinned
+([b-stage-0.md](b-stage-0.md)) and the OpenCV adapters executed on Windows
+([b-stage-2.md](b-stage-2.md)). No real human face has been through the system,
+and the Mac runtime gate is still open.
 
 ## Not in scope here
 

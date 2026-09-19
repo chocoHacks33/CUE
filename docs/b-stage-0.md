@@ -16,42 +16,53 @@ Everything B owns lives in one package, `apps/api/src/cue_api/guests/`.
 
 ## The model files
 
-| Key | File | Purpose | Source | Declared licence | Licence verified | SHA-256 pinned |
-|---|---|---|---|---|---|---|
-| `yunet` | `face_detection_yunet_2023mar.onnx` | face detection | [opencv_zoo/face_detection_yunet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) | MIT (as published upstream) | NO | NO |
-| `sface` | `face_recognition_sface_2021dec.onnx` | face embedding | [opencv_zoo/face_recognition_sface](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface) | Apache-2.0 (as published upstream) | NO | NO |
+| Key | File | Purpose | Declared licence | Licence verified | SHA-256 pinned |
+|---|---|---|---|---|---|
+| `yunet` | `face_detection_yunet_2023mar.onnx` | face detection | MIT, Copyright (c) 2020 Shiqi Yu | **YES** | **YES** |
+| `sface` | `face_recognition_sface_2021dec.onnx` | face embedding | Apache-2.0 | **YES** | **YES** |
+
+Sources: [opencv_zoo/face_detection_yunet](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet)
+and [opencv_zoo/face_recognition_sface](https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface).
+
+Pinned digests, recorded in `guests/face_models.py`:
+
+```
+yunet  8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4   232,589 bytes
+sface  0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79  38,696,353 bytes
+```
 
 Weights are **not** committed. `models/` is gitignored.
 
-## Why the checksum column is empty
+## How these digests were obtained
 
-A checksum written from memory would pass review and prove nothing. The values
-stay empty until someone downloads the files and records the digest of what they
-actually got. `apps/api/tests/test_guest_face_models.py` asserts that nothing is
-pinned until that happens, so this page and the code cannot drift apart.
-
-## Pinning procedure
+Not copied from a README. The files were downloaded from upstream opencv_zoo and
+hashed locally:
 
 ```bash
-cd apps/api
-mkdir -p models
-# download both .onnx files from the source links above into models/
-python -m pip install -e ".[dev]"
+cd apps/api && mkdir -p models
+base=https://media.githubusercontent.com/media/opencv/opencv_zoo/main/models
+curl -sSL -o models/face_detection_yunet_2023mar.onnx   "$base/face_detection_yunet/face_detection_yunet_2023mar.onnx"
+curl -sSL -o models/face_recognition_sface_2021dec.onnx   "$base/face_recognition_sface/face_recognition_sface_2021dec.onnx"
 python -m cue_api.guests.enrolment_cli models --model-dir models
 ```
 
-The command prints each file's `sha256`. For each one:
+Note the `media.githubusercontent.com/media/` host. The ordinary `raw.` URL
+returns a **131-byte git-lfs pointer**, not the model, and an ONNX loader fails
+on it with an unhelpful parse error.
 
-1. Paste the digest into `expected_sha256` in `src/cue_api/guests/face_models.py`.
-2. Paste the same digest into the table above and set "SHA-256 pinned" to YES.
-3. Open the upstream `LICENSE` file next to the model, confirm the licence text
-   matches the declared licence, then set `licence_verified=True` and update the
-   table. If it does not match, record what it actually says.
-4. Re-run `python -m pytest` — the "nothing is claimed before download" test will
-   now fail by design; update it to assert the pins instead.
+**Independent check:** that pointer file declares `oid sha256:8f2383e4…2552fa4`
+for YuNet, which matches the digest of the file actually downloaded. So the
+YuNet pin is corroborated by upstream metadata, not only by our own hashing.
 
-After pinning, every machine that runs the adapters verifies the digest at model
-load time and refuses a file that does not match.
+**Licences read, not assumed.** Both upstream `LICENSE` files were fetched and
+read. YuNet is the MIT licence, Copyright (c) 2020 Shiqi Yu. SFace is Apache-2.0.
+Both match what was declared, so `licence_verified=True` is recorded.
+
+From here on every machine verifies a model against its pin at load time and
+refuses a file that does not match — `test_a_wrong_digest_stops_the_model_loading_at_all`
+covers that.
+
+`models/` is gitignored, so the weights are never committed.
 
 ## Runtime requirement
 
@@ -161,19 +172,29 @@ number.
 | File | Tests |
 |---|---|
 | `apps/api/tests/test_guest_registry.py` | 44 |
-| `apps/api/tests/test_guest_face_models.py` | 6 |
+| `apps/api/tests/test_guest_face_models.py` | 7 |
+| `apps/api/tests/test_guest_opencv_adapters.py` | 13 (skipped without the weights) |
 
 ## Verified
 
 Windows 11, Python 3.14.7:
 
 ```
-cd apps/api && python -m pytest -q     ->  182 passed (whole backend suite)
+cd apps/api && python -m pip install -e ".[opencv,dev]"
+cd apps/api && python -m pytest -q     ->  286 passed
 cd apps/api && python -m ruff check .  ->  All checks passed
+cue-guests models --model-dir models   ->  both digests match their pins
 ```
 
-Never run: any real pixels. No weights downloaded, no OpenCV wheel installed, no
-face detected. The adapters are written against OpenCV's documented API and have
-never executed.
+Without the OpenCV extra or the weights, the 13 adapter tests skip and the suite
+reports **273 passed, 13 skipped** — which is what CI does.
+
+**The weights have now been downloaded and both models load and run** on this
+Windows laptop. See [b-stage-2.md](b-stage-2.md) for what that established and
+what it did not.
+
+**Still NOT RUN:** the Mac runtime gate with D. This was Windows; whether an
+OpenCV wheel exists for D's macOS, Python and architecture is a separate
+question and still unanswered.
 
 Next: [b-stage-prep-1.md](b-stage-prep-1.md), then [b-stage-1.md](b-stage-1.md).

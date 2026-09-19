@@ -98,10 +98,11 @@ OpenAPI route dump                     ->  10 guest routes, no path contains "vi
 
 **Not run locally:** the npm gates. Node is not installed on this machine.
 
-**Not run anywhere:** anything involving real pixels. No weights downloaded, no
-OpenCV wheel installed, no face detected, no camera published. Every test on this
-branch uses scripted fixtures. **This branch does not establish that identity
-works** — it establishes that the policy around it abstains when it should.
+**Not run on this branch:** anything involving real pixels. Every test here uses
+scripted fixtures, so **this branch does not establish that identity works** — it
+establishes that the policy around it abstains when it should. The real models
+are run on the Stage 2 branch; see [b-stage-2.md](b-stage-2.md), including why
+drawn faces cannot validate the thresholds.
 
 ## Not in scope here
 
@@ -117,12 +118,14 @@ works** — it establishes that the policy around it abstains when it should.
 1. **Mac runtime gate with D** — still the blocker. Install `apps/api[opencv]`,
    confirm an OpenCV wheel exists for D's Python and architecture.
 2. **Download and pin the weights** — procedure in [b-stage-0.md](b-stage-0.md).
-3. **First real inference on the Mac** — one photo through `cue-guests enrol`,
-   one live frame through `YuNetDetector`. Until then every adapter on this
-   branch is untested code.
+3. **First real inference on D's Mac** — one photo through `cue-guests enrol`,
+   one live frame through `YuNetDetector`. The adapters have now executed on
+   Windows ([b-stage-2.md](b-stage-2.md)); the Mac wheel is still unproven.
 4. **Retune against real frames.** The tracker is IoU-only: a guest who crosses
    in front of another on the same camera can swap tracks. The confirmation reset
    limits that to a lost identity rather than a wrong one, but it is not solved.
+
+The live wiring that drives all of this is [b-stage-2.md](b-stage-2.md).
 
 Earlier stages: [b-stage-0.md](b-stage-0.md),
 [b-stage-prep-1.md](b-stage-prep-1.md), [b-stage-1.md](b-stage-1.md).

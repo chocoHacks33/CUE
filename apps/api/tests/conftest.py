@@ -12,8 +12,10 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from cue_api.contracts import CameraId
 from cue_api.guests.reference_gallery import GuestReferences, ReferenceGallery, normalise
 from cue_api.guests.types import DecodedFrame, Embedding, FaceDetection, PixelBox
+from cue_api.media_contracts import DecodedVideoFrame, PixelFormat
 
 FRAME_WIDTH = 1280
 FRAME_HEIGHT = 720
@@ -122,3 +124,85 @@ def gallery() -> ReferenceGallery:
             ),
         ),
     )
+
+
+def make_video_frame(
+    *,
+    camera_id: CameraId = CameraId.GUEST,
+    stream_epoch: int = 1,
+    sequence: int = 0,
+    width: int = FRAME_WIDTH,
+    height: int = FRAME_HEIGHT,
+    pixel_format: PixelFormat = PixelFormat.BGR24,
+    orientation_degrees: int = 0,
+    mirrored: bool = False,
+    received_at_monotonic_s: float = 1_000.0,
+    capture_time_s: float | None = 999.96,
+    stride_bytes: int | None = None,
+    event_id: str = "hackmit-demo",
+    track_sid: str = "TR_guest_1",
+) -> DecodedVideoFrame:
+    """One of A's decoded frames, with a payload of the exact declared length.
+
+    Defaults match `make_frame`, so a `make_detection` box lands inside the frame
+    and reaches the matcher instead of being refused by the quality gate.
+    """
+    stride = stride_bytes if stride_bytes is not None else width * pixel_format.bytes_per_pixel
+    return DecodedVideoFrame(
+        event_id=event_id,
+        camera_id=camera_id,
+        stream_epoch=stream_epoch,
+        track_sid=track_sid,
+        sequence=sequence,
+        width=width,
+        height=height,
+        stride_bytes=stride,
+        pixel_format=pixel_format,
+        orientation_degrees=orientation_degrees,
+        mirrored=mirrored,
+        received_at_monotonic_s=received_at_monotonic_s,
+        capture_time_s=capture_time_s,
+        data=bytes(stride * height),
+    )
+
+
+@dataclass
+class RecordingSink:
+    """A backend that remembers what it was told, and can be told to fail."""
+
+    gallery: ReferenceGallery = field(default_factory=ReferenceGallery.empty)
+    posted: list[dict] = field(default_factory=list)
+    invalidations: list[dict] = field(default_factory=list)
+    fail_post: bool = False
+    fail_gallery: bool = False
+    fail_invalidate: bool = False
+
+    def fetch_gallery(self, event_id: str) -> ReferenceGallery:
+        if self.fail_gallery:
+            raise RuntimeError("backend unreachable")
+        return self.gallery
+
+    def post_observation(self, observation: dict) -> dict:
+        if self.fail_post:
+            raise RuntimeError("backend refused the observation")
+        self.posted.append(observation)
+        return observation
+
+    def invalidate(
+        self,
+        *,
+        event_id: str,
+        camera_id: str,
+        current_stream_epoch: int,
+        reason: str,
+    ) -> dict:
+        if self.fail_invalidate:
+            raise RuntimeError("backend unreachable")
+        record = {
+            "eventId": event_id,
+            "cameraId": camera_id,
+            "currentStreamEpoch": current_stream_epoch,
+            "reason": reason,
+        }
+        self.invalidations.append(record)
+        return record
