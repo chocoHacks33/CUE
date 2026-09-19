@@ -1,9 +1,12 @@
 """Model file registry: where the weights come from, and what we verified.
 
-Checksums start empty on purpose. A fabricated digest is worse than none: it
-would pass a review and prove nothing. B records the digest of the file actually
-downloaded, pins it here and in `docs/b-stage-0.md`, and from then on every
-machine verifies against that pin.
+Both digests are the files actually downloaded from upstream opencv_zoo and
+hashed locally, not values copied from a README. YuNet's digest independently
+matches the `oid sha256` in upstream's git-lfs pointer. Both upstream LICENSE
+files were read and match the declared licence.
+
+From here on every machine verifies a model file against these pins at load
+time and refuses one that does not match.
 """
 
 from __future__ import annotations
@@ -39,8 +42,9 @@ YUNET = ModelFile(
     source_url=(
         "https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet"
     ),
-    declared_licence="MIT (per upstream opencv_zoo model directory)",
-    licence_verified=False,
+    declared_licence="MIT, Copyright (c) 2020 Shiqi Yu (upstream LICENSE read)",
+    licence_verified=True,
+    expected_sha256="8f2383e4dd3cfbb4553ea8718107fc0423210dc964f9f4280604804ed2552fa4",
 )
 
 SFACE = ModelFile(
@@ -50,8 +54,9 @@ SFACE = ModelFile(
     source_url=(
         "https://github.com/opencv/opencv_zoo/tree/main/models/face_recognition_sface"
     ),
-    declared_licence="Apache-2.0 (per upstream opencv_zoo model directory)",
-    licence_verified=False,
+    declared_licence="Apache-2.0 (upstream LICENSE read)",
+    licence_verified=True,
+    expected_sha256="0ba9fbfa01b5270c96627c4ef784da859931e02f04419c829e83484087c34e79",
 )
 
 MODEL_FILES: tuple[ModelFile, ...] = (YUNET, SFACE)

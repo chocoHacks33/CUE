@@ -40,7 +40,7 @@ def _models_command(args: argparse.Namespace) -> int:
             )
     if unpinned:
         print(
-            "note: paste these sha256 values into cue_api.guests/models.py and "
+            "note: paste these sha256 values into cue_api/guests/face_models.py and "
             "docs/b-stage-0.md to pin them",
             file=sys.stderr,
         )

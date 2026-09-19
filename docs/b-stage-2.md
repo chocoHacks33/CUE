@@ -82,6 +82,7 @@ be named; anyone missing from it loses their identity in that same call.
 |---|---|
 | `tests/test_guest_observation_worker.py` | 17 |
 | `tests/test_guest_frame_intake.py` | 16 |
+| `tests/test_guest_opencv_adapters.py` | 13 — the only tests that run real models |
 
 The worker tests assert the **positive** path first — three frames of agreement
 reach `CONFIRMED` with `usableForNamedTake: true` — because without that, every
@@ -93,35 +94,73 @@ proved nothing. The fixture frame now matches the detection geometry.
 
 `FramePayload.packed_bytes()` strips row padding in pure Python, so the stride
 arithmetic — the part most likely to be wrong — is verified on every machine.
-Only the numpy reshape in `_payload_to_array` stays on the untested live path.
+
+## Real models now run
+
+OpenCV and the weights were installed and the adapters **executed for the first
+time**. `test_guest_opencv_adapters.py` holds what that established; it skips
+without `apps/api[opencv]` or the weights, so CI is unaffected.
+
+What ran, for real:
+
+- Both ONNX models load and verify against their pinned digests.
+- `_payload_to_array` reconstructs a known image **exactly**, with a packed
+  stride and with a padded one. This was the failure I most expected: a stride
+  mistake skews the image, and a skewed face still detects.
+- YuNet returns no face on a flat frame, and **does detect a crudely drawn face**
+  with five landmarks at score 0.76.
+- The full path runs with no stand-ins anywhere: detect -> quality -> embed ->
+  match -> confirm. One frame gives `PROVISIONAL`; three consistent frames give
+  `CONFIRMED` with `usableForNamedTake: true` and `PROVISIONAL_DEFAULT`.
+
+### One real bug, found by running it
+
+**SFace returns an unnormalised embedding** — measured norm about 3.9, not 1.0.
+`cosine_similarity` is a plain dot product of unit vectors, so an unnormalised
+probe inflates every similarity several-fold and would put a name on everybody.
+
+It was not live: `observation_pipeline` normalises the probe, and the server
+normalises references on enrolment, so both sides were already unit vectors. But
+it was one forgotten call away from being the exact failure this project must not
+ship. `SFaceEmbedder.embed` now normalises at the source, and
+`test_the_embedder_returns_a_unit_vector` holds it there.
 
 ## Verified
 
 Windows 11, Python 3.14.7:
 
 ```
-cd apps/api && python -m pytest -q     ->  272 passed  (was 239)
+cd apps/api && python -m pip install -e ".[opencv,dev]"
+cd apps/api && python -m pytest -q     ->  286 passed  (was 239)
 cd apps/api && python -m ruff check .  ->  All checks passed
 ruff --target-version py311            ->  All checks passed
 ```
 
-## What this does NOT establish
+Without the extra or the weights: **273 passed, 13 skipped** — what CI runs.
 
-**No pixels have moved through this.** numpy and OpenCV are not installed on this
-machine, so `YuNetDetector`, `SFaceEmbedder` and `_payload_to_array` have still
-never executed. The detector and embedder in every test are scripted stand-ins.
+## What this still does NOT establish
 
-So this stage establishes that **the plumbing is right and the policy abstains
-when it should**. It does not establish that identity works. The exit gate for
-that is unchanged and still **NOT RUN**:
+**Accuracy. Nothing here measures it, and one result says clearly why not.**
 
-1. **Mac runtime gate with D** — `apps/api[opencv]`, confirm a wheel exists for
-   D's Python and architecture.
-2. **Download and pin the weights** — procedure in [b-stage-0.md](b-stage-0.md).
-3. **First real inference** — one photo through `cue-guests enrol`, one live frame
-   through `YuNetDetector`. The first thing to check is
-   `_payload_to_array`: if A's stride handling and this reshape disagree, the
-   image arrives skewed, and a skewed face still detects.
+Every *detectable* drawn-face variant scored **0.78-0.93** cosine against an
+unrelated reference — far above the 0.363 accept threshold. SFace is trained on
+photographs, so crude drawings collapse into a narrow region of its embedding
+space and are **useless as negatives**.
+`test_drawn_faces_cannot_serve_as_negatives` records this so nobody later
+mistakes a passing synthetic suite for evidence.
+
+So the accept threshold (0.363) and margin (0.06) remain **unmeasured**, and no
+real human face has been through this system.
+
+Still **NOT RUN**:
+
+1. **Mac runtime gate with D.** This was Windows. Whether an OpenCV wheel exists
+   for D's macOS, Python and architecture is a separate question, still open.
+2. **A real face.** Enrolling and matching actual people, from real cameras.
+3. **The identity report** — `docs/results/b-identity-report.template.md`: at
+   least 30 clear positives and 30 unknown/ambiguous trials on a held-out set.
+   Until that exists B claims no accuracy number and the demo discloses
+   `PROVISIONAL_DEFAULT`.
 4. **B's media checks** — `docs/results/b-media-check.template.md`.
 
 ## Still open in B's lane

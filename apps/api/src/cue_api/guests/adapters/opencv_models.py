@@ -12,6 +12,7 @@ from typing import Any
 
 from cue_api.guests.face_models import DEFAULT_MODEL_DIR, SFACE, YUNET, verify
 from cue_api.guests.frame_intake import FramePayload
+from cue_api.guests.reference_gallery import normalise
 from cue_api.guests.types import DecodedFrame, Embedding, FaceDetection, PixelBox
 
 
@@ -171,4 +172,8 @@ class SFaceEmbedder:
 
         aligned = self._recognizer.alignCrop(image, numpy.array([row], dtype=numpy.float32))
         feature = self._recognizer.feature(aligned)
-        return tuple(float(value) for value in feature.flatten())
+        # SFace returns an unnormalised vector (measured norm ~3.9 on this build).
+        # Normalising here, not just in the callers, because cosine_similarity is a
+        # plain dot product: a caller who forgot would get similarities several
+        # times too large and put a name on everybody.
+        return normalise(tuple(float(value) for value in feature.flatten()))
