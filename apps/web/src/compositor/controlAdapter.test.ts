@@ -6,6 +6,7 @@ import {
   backendClockOffsetMs,
   commandToDecision,
   idempotencyKey,
+  modeToAdopt,
   originForReasonCode,
   reconciliationFor,
 } from "./controlAdapter";
@@ -109,5 +110,22 @@ describe("acknowledgement adapter", () => {
     const key = idempotencyKey("take", 1_700_000_000_000, "ab12");
     expect(key).toMatch(/^[A-Za-z0-9._:-]{8,96}$/);
     expect(idempotencyKey("m", 1, "")).toMatch(/^[A-Za-z0-9._:-]{8,96}$/);
+  });
+});
+
+describe("modeToAdopt", () => {
+  it("never adopts AUTO from the backend unless the operator armed it here", () => {
+    expect(modeToAdopt("AUTO", false)).toEqual({ adopt: "ASSIST", demoteBackend: true });
+  });
+
+  it("adopts AUTO once the operator has enabled it in this renderer", () => {
+    expect(modeToAdopt("AUTO", true)).toEqual({ adopt: "AUTO", demoteBackend: false });
+  });
+
+  it("adopts every other backend mode as-is", () => {
+    for (const mode of ["ASSIST", "MANUAL_HOLD", "ENDED", "SETUP"] as const) {
+      expect(modeToAdopt(mode, false)).toEqual({ adopt: mode, demoteBackend: false });
+      expect(modeToAdopt(mode, true)).toEqual({ adopt: mode, demoteBackend: false });
+    }
   });
 });

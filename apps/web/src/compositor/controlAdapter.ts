@@ -1,4 +1,5 @@
 import {
+  type ControlMode,
   type DecisionOrigin,
   type ProgramSource,
   type RenderAck,
@@ -87,4 +88,19 @@ export function reconciliationFor(
 export function idempotencyKey(prefix: string, nowWallMs: number, nonce: string): string {
   const safe = `${prefix}:${Math.round(nowWallMs)}:${nonce}`.replace(/[^A-Za-z0-9._:-]/g, "-");
   return safe.slice(0, 96).padEnd(8, "0");
+}
+
+/**
+ * Plan section 9: "reconnect into ASSIST" and "resume AUTO is explicit". The
+ * compositor adopts AUTO from the backend only while the operator has armed it
+ * in this renderer since the last connect or HOLD. Otherwise it stays in ASSIST
+ * locally and asks the backend to step down, so a policy command issued in the
+ * meantime is parked as a suggestion rather than cut on air.
+ */
+export function modeToAdopt(
+  backendMode: ControlMode,
+  operatorArmedAuto: boolean,
+): { adopt: ControlMode; demoteBackend: boolean } {
+  if (backendMode === "AUTO" && !operatorArmedAuto) return { adopt: "ASSIST", demoteBackend: true };
+  return { adopt: backendMode, demoteBackend: false };
 }
