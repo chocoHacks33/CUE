@@ -39,11 +39,13 @@ load_dotenv()
 
 # Local project imports go after sys.path setup.
 from cue_api.c_lane_live import (  # noqa: E402
-    LiveLane, TARGET_SAMPLE_RATE,
+    TARGET_SAMPLE_RATE,
+    LiveLane,
 )
 from cue_api.contracts import CameraId  # noqa: E402
 from cue_api.media_contracts import (  # noqa: E402
-    DecodedAudioChunk, SampleFormat,
+    DecodedAudioChunk,
+    SampleFormat,
 )
 from cue_api.policy.log import DecisionLogger  # noqa: E402
 from cue_api.policy.wire import DecisionEvent  # noqa: E402
@@ -183,11 +185,13 @@ class BuildDeepgramFactory:
         model: str = "nova-3",
         endpointing_ms: int = 300,
         utterance_end_ms: int = 1000,
+        on_raw=None,  # D's desk feed: sees every Deepgram frame after the lane does
     ) -> None:
         self._lane = lane
         self._model = model
         self._endpointing_ms = endpointing_ms
         self._utterance_end_ms = utterance_end_ms
+        self._on_raw = on_raw
 
     def __call__(self):  # -> DeepgramSession
         from deepgram import DeepgramClient
@@ -205,18 +209,20 @@ class BuildDeepgramFactory:
         cm = client.listen.v1.connect(**connect_kwargs)
         return _DeepgramSessionAdapter(
             cm, EventType, self._lane, self._model, self._endpointing_ms,
+            on_raw=self._on_raw,
         )
 
 
 class _DeepgramSessionAdapter:
     """Wraps the deepgram-sdk context manager into DeepgramSession shape."""
 
-    def __init__(self, cm, EventType, lane, model, endpointing_ms):
+    def __init__(self, cm, EventType, lane, model, endpointing_ms, on_raw=None):
         self._cm = cm
         self._et = EventType
         self._lane = lane
         self._model = model
         self._endpointing_ms = endpointing_ms
+        self._on_raw = on_raw
         self._conn = None
         self._listen_future = None
 
@@ -227,6 +233,11 @@ class _DeepgramSessionAdapter:
             payload = message.model_dump()
             payload["audio_epoch"] = 1
             self._lane.on_deepgram_message(payload, time.monotonic())
+            if self._on_raw is not None:
+                try:
+                    self._on_raw(payload)
+                except Exception:  # noqa: BLE001 -- the desk never stalls the lane
+                    pass
 
         self._conn.on(self._et.OPEN, lambda *_a, **_k: print(
             "live_lane: deepgram open", flush=True,
@@ -274,6 +285,26 @@ async def _run(args: argparse.Namespace) -> int:
 
     log_path = Path(args.log_decisions) if args.log_decisions else None
     sender = StdoutSender(log_path)
+    on_raw = None
+    if args.desk_feed:
+        # D's desk UI (docs/DESK-UI.md): decisions and captions also go to the API's desk feed.
+        from cue_api.desk.feed_client import DeskFeed, DeskFeedSender, caption_from_deepgram
+        secret = os.environ.get("CUE_PRODUCER_SECRET", "")
+        if not secret:
+            print("live_lane: --desk-feed needs CUE_PRODUCER_SECRET in the environment",
+                  file=sys.stderr, flush=True)
+            return 2
+        desk_feed = DeskFeed(args.desk_feed, args.event, secret)
+        sender = DeskFeedSender(desk_feed, sender)
+        desk_feed.post({"kind": "deepgram_config", "config": {
+            "model": args.dg_model, "endpointing_ms": args.endpointing_ms,
+            "utterance_end_ms": args.utterance_end_ms}})
+
+        def on_raw(payload: dict) -> None:
+            item = caption_from_deepgram(payload)
+            if item is not None:
+                desk_feed.post(item)
+        print(f"live_lane: desk feed on {desk_feed.url}", flush=True)
     pcm_source = MicPcmSource(device=args.input_device)
     camera = FakeCameraProvider()
     lane = LiveLane(
@@ -283,6 +314,7 @@ async def _run(args: argparse.Namespace) -> int:
             model=args.dg_model,
             endpointing_ms=args.endpointing_ms,
             utterance_end_ms=args.utterance_end_ms,
+            on_raw=on_raw,
         )(),
         camera_state=camera,
         sender=sender,
@@ -318,6 +350,10 @@ def main(argv: list[str]) -> int:
                     type=int, default=300)
     ap.add_argument("--utterance-end-ms", dest="utterance_end_ms",
                     type=int, default=1000)
+    ap.add_argument("--desk-feed", default=None,
+                    help="API base URL (e.g. http://127.0.0.1:8000): also post decisions "
+                         "and captions to D's desk feed; needs CUE_PRODUCER_SECRET")
+    ap.add_argument("--event", default="hackmit-demo", help="event id for the desk feed")
     ap.add_argument("--log-decisions", default=None,
                     help="append DecisionRecord JSONL for latency_report.py")
     args = ap.parse_args(argv)

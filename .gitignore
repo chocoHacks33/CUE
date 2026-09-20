@@ -40,3 +40,6 @@ docs/D_role_guide.md
 docs/CUE_Product_Requirements_condensed.md
 docs/results/d-media-check.md
 docs/results/stage6-handoff.json
+
+# Desk UI: the Apps Script URL is a capability; keep the real config out of Git.
+apps/web/public/config.js
