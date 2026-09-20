@@ -241,6 +241,7 @@ def build_guest_router(
             report=current.report,
             mac_runtime_gate_passed=current.mac_runtime_gate_passed,
             media_checks_passed=current.media_checks_passed,
+            morning_validation=current.morning_validation,
         )
         return IdentityReadinessResponse(
             event_id=event_id,
@@ -251,6 +252,11 @@ def build_guest_router(
             disclosure=readiness.disclosure,
             blocking_reasons=list(readiness.blocking_reasons),
             attestations=current.attestations(),
+            morning_validation=(
+                None
+                if current.morning_validation is None
+                else current.morning_validation.to_document()
+            ),
         )
 
     @router.get("/guests/tallies")

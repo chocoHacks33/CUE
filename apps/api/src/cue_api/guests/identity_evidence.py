@@ -23,6 +23,7 @@ from pathlib import Path
 from cue_api.guests.calibration_store import load_or_provisional
 from cue_api.guests.confidence_calibration import Calibration
 from cue_api.guests.identity_eval import IdentityReport
+from cue_api.guests.morning_validation import MorningValidation
 
 #: Default location of a calibration fitted by `cue-guests calibrate`.
 DEFAULT_CALIBRATION_PATH = Path("calibration.json")
@@ -59,6 +60,8 @@ class IdentityEvidence:
     report: IdentityReport | None = None
     mac_runtime_gate: Attestation | None = None
     media_checks: Attestation | None = None
+    #: Stage 7's re-check against today's conditions. Can only remove capability.
+    morning_validation: MorningValidation | None = None
 
     @property
     def mac_runtime_gate_passed(self) -> bool:
@@ -88,6 +91,7 @@ def gather(
     report: IdentityReport | None = None,
     mac_runtime_gate: Attestation | None = None,
     media_checks: Attestation | None = None,
+    morning_validation: MorningValidation | None = None,
 ) -> IdentityEvidence:
     """Read what is on disk, and take the rest as supplied.
 
@@ -100,4 +104,5 @@ def gather(
         report=report,
         mac_runtime_gate=mac_runtime_gate,
         media_checks=media_checks,
+        morning_validation=morning_validation,
     )

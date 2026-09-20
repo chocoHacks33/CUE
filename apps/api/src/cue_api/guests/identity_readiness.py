@@ -23,6 +23,7 @@ Reaching `NAMED_AUTO` requires every one of these, and any missing one is named 
 - a `MEASURED` calibration, not the provisional anchor
 - the Mac runtime gate passed
 - B's media checks passed
+- a Stage 7 morning validation, **dated today**, with all three checks passed
 
 A single wrong name anywhere drops straight to `ROLE_BASED`, skipping
 `NAMED_ASSIST`, because an operator confirming a suggestion cannot fix a system
@@ -33,10 +34,12 @@ that is wrong.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from enum import StrEnum
 
 from cue_api.guests.confidence_calibration import Calibration
 from cue_api.guests.identity_eval import IdentityReport
+from cue_api.guests.morning_validation import MorningValidation, missing_validation_reason
 from cue_api.guests.types import CalibrationStatus
 
 
@@ -89,9 +92,16 @@ def assess_identity_readiness(
     report: IdentityReport | None = None,
     mac_runtime_gate_passed: bool = False,
     media_checks_passed: bool = False,
+    morning_validation: MorningValidation | None = None,
+    today: date | None = None,
 ) -> IdentityReadiness:
-    """What B's evidence permits. Absent evidence, it permits the least."""
+    """What B's evidence permits. Absent evidence, it permits the least.
+
+    `morning_validation` is Stage 7's re-check against today's conditions. It is
+    one-directional: it can only remove capability, never grant it.
+    """
     reasons: list[str] = []
+    today = today or date.today()
 
     if report is None:
         reasons.append(
@@ -116,10 +126,21 @@ def assess_identity_readiness(
     if not media_checks_passed:
         reasons.append("B's media checks have not run")
 
+    # Stage 7: claims have to match *today's* conditions. Overnight the laptops
+    # move, and moving a laptop changes framing.
+    if morning_validation is None:
+        reasons.append(missing_validation_reason(today))
+        morning_failed = False
+    else:
+        validation_reasons = morning_validation.blocking_reasons(today)
+        reasons.extend(validation_reasons)
+        # A capability that failed this morning is disabled, not merely deducted.
+        morning_failed = bool(morning_validation.failures)
+
     # A wrong name, or no evidence at all, means no naming from faces.
     wrong_names = report is not None and bool(report.total_wrong_names)
     no_usable_report = report is None or not report.claimable
-    if wrong_names or no_usable_report:
+    if wrong_names or no_usable_report or morning_failed:
         return IdentityReadiness(
             policy=NamingPolicy.ROLE_BASED,
             role_based=True,

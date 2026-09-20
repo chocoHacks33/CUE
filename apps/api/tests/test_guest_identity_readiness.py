@@ -6,6 +6,8 @@ tests drive it with incomplete evidence and check that it fails closed.
 
 from __future__ import annotations
 
+from datetime import date
+
 from cue_api.guests.confidence_calibration import (
     NO_CALIBRATION,
     PROVISIONAL_CALIBRATION,
@@ -17,7 +19,24 @@ from cue_api.guests.identity_readiness import (
     assess_identity_readiness,
     readiness_lines,
 )
+from cue_api.guests.morning_validation import CheckOutcome, MorningValidation
 from cue_api.guests.types import CalibrationStatus
+
+TODAY = date(2026, 9, 20)
+
+
+def validated_today(**overrides) -> MorningValidation:
+    """Stage 7's re-check, all three passed, dated today."""
+    values = {
+        "validated_on": TODAY,
+        "validated_by": "B",
+        "re_enrolment": CheckOutcome.PASSED,
+        "reframe": CheckOutcome.PASSED,
+        "unknown_rejection": CheckOutcome.PASSED,
+    }
+    values.update(overrides)
+    return MorningValidation(**values)
+
 
 MEASURED = Calibration(
     calibration_id="held-out-2026-09-19",
@@ -49,6 +68,8 @@ def everything_passed(**overrides):
         "report": clean_report(),
         "mac_runtime_gate_passed": True,
         "media_checks_passed": True,
+        "morning_validation": validated_today(),
+        "today": TODAY,
     }
     values.update(overrides)
     return assess_identity_readiness(**values)
@@ -69,13 +90,14 @@ def test_with_no_evidence_at_all_no_name_comes_from_a_face() -> None:
 
 
 def test_the_default_names_every_missing_piece() -> None:
-    readiness = assess_identity_readiness(calibration=PROVISIONAL_CALIBRATION)
+    readiness = assess_identity_readiness(calibration=PROVISIONAL_CALIBRATION, today=TODAY)
     joined = " | ".join(readiness.blocking_reasons)
 
     assert "no identity report" in joined
     assert "PROVISIONAL_DEFAULT" in joined
     assert "Mac runtime gate" in joined
     assert "media checks" in joined
+    assert "today's conditions" in joined
 
 
 def test_a_disclosure_is_never_empty() -> None:
