@@ -122,7 +122,13 @@ Venv note: the API venv has `livekit-api` but not `livekit`; the worker (`worker
 
 ## Sunday morning: re-establish (plan Stage 7, D)
 
-Framing is invalid after the laptops moved. Before claiming anything:
+Framing is invalid after the laptops moved. Before claiming anything, run the preflight and get every automated line to GO:
+
+```bash
+apps/api/.venv/bin/python scripts/d_morning_preflight.py --api http://127.0.0.1:8000 --event hackmit-demo
+```
+
+Then the physical rows in `docs/results/d-stage7-morning.md`, and the live segment from `docs/DEMO-D.md`:
 
 - Three feeds decoding with visual markers, mapping verified physically.
 - A's audio attached and audible on headphones; `refreshAudioSource` log shows one master track.
