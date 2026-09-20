@@ -58,6 +58,12 @@ class GuestBackendClient:
             },
         )
 
+    def read_observations(self, event_id: str) -> dict[str, Any]:
+        """The snapshot, used to verify a cleanup rather than to direct anything."""
+        return self._request(
+            "GET", "/api/v1/guests/observations", query={"eventId": event_id}
+        )
+
     def enrol_guest(
         self,
         *,

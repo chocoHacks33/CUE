@@ -57,6 +57,10 @@ Person B's work is one document per stage:
 - [docs/b-stage-3.md](docs/b-stage-3.md) — carrying a fitted calibration, and the tooling that runs the held-out trials
 - [docs/b-stage-4-prep.md](docs/b-stage-4-prep.md) — the AUTO-vs-ASSIST exit gate, the consent/deletion test, and the capture envelope
 - [docs/b-stage-4.md](docs/b-stage-4.md) — the readiness endpoint, and the trials recorded as NOT RUN
+- [docs/b-stage-5-prep.md](docs/b-stage-5-prep.md) — verified consented-data cleanup, limitations and licences
+- [docs/b-stage-5.md](docs/b-stage-5.md) — the freeze made enforceable, and the operator run sheet
+
+B's submission statement, written for a sceptical reader: [docs/b-limitations-and-licences.md](docs/b-limitations-and-licences.md). On the night, use [docs/b-run-sheet.md](docs/b-run-sheet.md).
 
 ```bash
 python -m pip install -e "apps/api[dev]"           # core, no OpenCV needed
