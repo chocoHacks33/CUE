@@ -73,7 +73,7 @@ Start the programme recording, then "Start 20-minute soak", then leave everythin
 | Item | Result | Evidence |
 |---|---|---|
 | Recording file size, duration, container | NOT RUN | |
-| Plays in QuickTime or VLC from start to end | NOT RUN | |
+| Plays in VLC or Chrome from start to end (WebM does not open in QuickTime) | NOT RUN | |
 | Audio continuous across every cut | NOT RUN | |
 | Private artifact location | | |
 

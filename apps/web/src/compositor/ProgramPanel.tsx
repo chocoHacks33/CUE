@@ -14,7 +14,14 @@ import {
 } from "@cue/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { pickRecordingMimeType, RECORDING_MIME_CANDIDATES, recordingFileName, formatBytes, formatDuration } from "../recording/recorderSupport";
+import {
+  formatBytes,
+  formatDuration,
+  pickRecordingMimeType,
+  RECORDING_MIME_CANDIDATES,
+  recordingFileName,
+  stillFileName,
+} from "../recording/recorderSupport";
 import { initialRecorderStatus, ProgramRecorder, type RecorderStatus } from "../recording/programRecorder";
 import {
   assembleRecording,
@@ -867,6 +874,27 @@ export function ProgramPanel({
     });
   }
 
+  /** Stage 5 evidence: a PNG of exactly what the programme canvas shows now, named by source and time. */
+  function saveStill() {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const source = switcherRef.current.program.source;
+    const fileName = stillFileName(eventId, source, new Date());
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        onLog("Programme still not saved: the canvas produced no image");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName;
+      anchor.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      onLog(`Programme still saved: ${fileName} (${source}${isLive(switcherRef.current) ? ", live" : ", not yet drawn"})`);
+    }, "image/png");
+  }
+
   function startSoak() {
     const startedAtMs = performance.now();
     setSoak({ running: true, startedAtMs, startedWallMs: Date.now(), samples: [] });
@@ -1105,6 +1133,9 @@ export function ProgramPanel({
         </button>
         <button type="button" onClick={downloadTimeline} disabled={switcher.acks.length === 0}>
           Download decision timeline
+        </button>
+        <button type="button" onClick={saveStill} title="PNG of the programme canvas as it is right now">
+          Save programme still
         </button>
       </div>
 

@@ -55,3 +55,12 @@ export function formatDuration(ms: number): string {
   const totalSeconds = Math.floor(ms / 1000);
   return `${twoDigits(Math.floor(totalSeconds / 60))}:${twoDigits(totalSeconds % 60)}`;
 }
+
+/** PNG name for a saved programme still (Stage 5 screenshots): event, what was on air, and when. */
+export function stillFileName(eventId: string, source: string, when: Date): string {
+  const safe = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "x";
+  const stamp =
+    `${when.getFullYear()}${twoDigits(when.getMonth() + 1)}${twoDigits(when.getDate())}-` +
+    `${twoDigits(when.getHours())}${twoDigits(when.getMinutes())}${twoDigits(when.getSeconds())}`;
+  return `cue-still-${safe(eventId)}-${safe(source)}-${stamp}.png`;
+}
