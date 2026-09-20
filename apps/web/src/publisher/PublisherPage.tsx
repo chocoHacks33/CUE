@@ -6,8 +6,9 @@ import {
 import { Room, RoomEvent, Track } from "livekit-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { defaultApiBaseUrl } from "../apiBase";
 import { claimPairing, exchangePairing, readPairingStatus } from "./api";
-import { captureConstraints, validateCapturedTracks } from "./mediaPolicy";
+import { captureConstraints, listVideoInputs, validateCapturedTracks, type VideoInput } from "./mediaPolicy";
 
 type PublisherStatus =
   | "idle"
@@ -21,7 +22,7 @@ type PublisherStatus =
   | "reconnecting"
   | "error";
 
-const DEFAULT_API_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const DEFAULT_API_URL = defaultApiBaseUrl(import.meta.env.VITE_API_BASE_URL, window.location);
 
 interface PairingSession {
   claimId: string;
@@ -49,6 +50,9 @@ export function PublisherPage() {
   const [status, setStatus] = useState<PublisherStatus>("idle");
   const [detail, setDetail] = useState("Enter the single-use token supplied by the producer.");
   const [remoteIdentity, setRemoteIdentity] = useState<string | null>(null);
+  /** Cameras the browser exposes after the first permission; a phone lists each lens separately. */
+  const [videoInputs, setVideoInputs] = useState<VideoInput[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -82,7 +86,7 @@ export function PublisherPage() {
     };
   }, []);
 
-  async function startPreview() {
+  async function startPreview(deviceId: string | null = selectedDeviceId) {
     if (!window.isSecureContext) {
       setStatus("error");
       setDetail("Webcam access requires HTTPS or localhost.");
@@ -103,13 +107,22 @@ export function PublisherPage() {
     setStatus("requesting-media");
     setDetail("Waiting for camera permission…");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia(captureConstraints(cameraId));
+      const stream = await navigator.mediaDevices.getUserMedia(captureConstraints(cameraId, { deviceId }));
       validateCapturedTracks(cameraId, stream);
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
+      // Labels exist only after a permission; list the lenses now and remember which one opened.
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        setVideoInputs(listVideoInputs(devices));
+      } catch {
+        // A browser that cannot enumerate still previews and publishes.
+      }
+      const opened = stream.getVideoTracks()[0]?.getSettings().deviceId;
+      if (opened) setSelectedDeviceId(opened);
       setStatus("preview-ready");
       setDetail(
         mayPublishMicrophone(cameraId)
@@ -314,6 +327,26 @@ export function PublisherPage() {
               disabled={controlsLocked || Boolean(pairing)}
               onChange={(event) => setDeviceLabel(event.target.value)}
             />
+          </label>
+
+          <label>
+            Camera lens
+            <select
+              value={selectedDeviceId ?? ""}
+              disabled={videoInputs.length === 0 || status === "connecting" || status === "published" || status === "reconnecting"}
+              onChange={(event) => {
+                const deviceId = event.target.value || null;
+                setSelectedDeviceId(deviceId);
+                void startPreview(deviceId);
+              }}
+            >
+              {videoInputs.length === 0 && <option value="">Test the preview first to list cameras</option>}
+              {videoInputs.map((input) => (
+                <option key={input.deviceId} value={input.deviceId}>
+                  {input.label}
+                </option>
+              ))}
+            </select>
           </label>
 
           <label>

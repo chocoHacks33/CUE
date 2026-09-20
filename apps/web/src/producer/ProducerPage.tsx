@@ -19,6 +19,7 @@ import type {
 } from "livekit-client";
 import { useCallback, useEffect, useRef, useState } from "react";
 
+import { defaultApiBaseUrl } from "../apiBase";
 import { ProgramPanel } from "../compositor/ProgramPanel";
 import { RecordingTest } from "../recording/RecordingTest";
 import { describeEvidence, type EvidenceLine } from "./evidenceView";
@@ -56,7 +57,7 @@ type ReceiverStatus =
   | "disconnected"
   | "error";
 
-const DEFAULT_API_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000";
+const DEFAULT_API_URL = defaultApiBaseUrl(import.meta.env.VITE_API_BASE_URL, window.location);
 const MAX_LOG_LINES = 80;
 const TICK_MS = 250;
 

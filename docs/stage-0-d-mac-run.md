@@ -136,6 +136,10 @@ Then the physical rows in `docs/results/d-stage7-morning.md`, and the live segme
 - A 20-minute soak if time allows, else a 5-minute one, exported; note which.
 - Play the recording outside the app before the pitch.
 
+## Phones as cameras (one HTTPS tunnel)
+
+The dev server now proxies `/api` and `/health` to the API, so one `ngrok http 5173` serves the page and the API to a phone on the same origin; the phone's LiveKit media goes to LiveKit Cloud directly. cloudflared is blocked at this venue. Steps and the 15-minute go or no-go test: `docs/iphone-cameras.md`.
+
 ## Stage 4: measurements and failure drills
 
 All of this needs the three Windows webcams, A's mic and the worker running. Export files and recordings are private; fill `docs/results/d-stage4-check.md` from them.
