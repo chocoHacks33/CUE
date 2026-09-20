@@ -17,6 +17,8 @@ __pycache__/
 Thumbs.db
 recordings/
 artifacts/
+# Current venue/location and private Stage 7 operational evidence.
+docs/results/stage7-a-preflight.json
 tests/**/results_*.json
 # C-lane: semantic evaluation results are per-run artifacts, not source.
 scripts/results_*.json
