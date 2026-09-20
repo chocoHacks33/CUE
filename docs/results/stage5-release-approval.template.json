@@ -1,0 +1,42 @@
+{
+  "schemaVersion": 1,
+  "testedCommit": "REPLACE_WITH_FULL_GIT_COMMIT",
+  "releaseTag": "cue-hackmit-2026-demo",
+  "stage4Gates": {
+    "A": {
+      "status": "INCOMPLETE",
+      "evidence": "REPLACE_WITH_PRIVATE_OR_SAFE_EVIDENCE_REFERENCE"
+    },
+    "B": {
+      "status": "INCOMPLETE",
+      "evidence": "REPLACE_WITH_PRIVATE_OR_SAFE_EVIDENCE_REFERENCE"
+    },
+    "C": {
+      "status": "INCOMPLETE",
+      "evidence": "REPLACE_WITH_PRIVATE_OR_SAFE_EVIDENCE_REFERENCE"
+    },
+    "D": {
+      "status": "INCOMPLETE",
+      "evidence": "REPLACE_WITH_PRIVATE_OR_SAFE_EVIDENCE_REFERENCE"
+    }
+  },
+  "macValidation": {
+    "cleanStartup": false,
+    "threeFeeds": false,
+    "recordingPlayback": false,
+    "runbookVerified": false
+  },
+  "submission": {
+    "saved": false,
+    "reopenedAndVerified": false,
+    "allMembersVerified": false,
+    "trackVerified": false
+  },
+  "ownerSignoffs": {
+    "A": false,
+    "B": false,
+    "C": false,
+    "D": false
+  },
+  "limitationsReviewed": false
+}
