@@ -98,6 +98,8 @@ Person A's Stage 4 failure hardening and fail-closed evidence gate are documente
 
 Person A's Stage 5 release preflight, exact-commit manifest and guarded tag finalizer are documented in [docs/stage-5-a-handoff.md](docs/stage-5-a-handoff.md). They refuse release certification until the real Stage 4, Mac and saved-submission evidence is complete.
 
+Person A's Stage 6 bounded offline regression and A-to-D handoff are documented in [docs/stage-6-a-handoff.md](docs/stage-6-a-handoff.md). Offline PASS never certifies cameras, providers, recording or release readiness.
+
 ## Producer receiver (Person D's Mac)
 
 `/producer` on the same web app is the subscribe-only Stage 0 receiver. It requests a credential from `POST /api/v1/stage0/receiver-token` (same Stage 0 secret, `canPublish: false`), joins the same room, and binds `CAM-HOST`, `CAM-GUEST` and `CAM-WIDE` tiles from each participant's server-set metadata. Only `CAM-HOST`'s microphone is played. The Mac never publishes.
