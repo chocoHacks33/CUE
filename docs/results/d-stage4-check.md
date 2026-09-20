@@ -93,4 +93,4 @@ Start the programme recording, then "Start 20-minute soak", then leave everythin
 
 B's readiness endpoint (`GET /api/v1/guests/readiness`, PR #20) returns the naming policy and disclosure text. At the time of writing it returns ROLE_BASED. Record here what the show will run in and why.
 
-Decision: NOT DECIDED. Disclosure text shown to the audience: `________________`
+Decision on the current evidence: role-based ASSIST (see `docs/results/stage-4-integration-check.md`). The compositor now reads the verdict live and shows it in the mode strip; on the integration tree it reads ROLE_BASED with the disclosure "Cameras are chosen by role, not by face recognition. Nothing on screen is identified by face." Revisit only if B's identity trials and calibration land before the freeze.

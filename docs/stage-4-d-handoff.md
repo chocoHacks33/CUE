@@ -50,7 +50,7 @@ Not run: anything with a real feed. No camera has reached this Mac at any stage.
 ## 7. For A, B and C
 
 - **A:** the compositor now sends `/mode ASSIST` on its own after a reconnect when the backend is in AUTO, with the snapshot's revision. If A prefers the backend to demote on director disconnect, do it there and the compositor's request becomes a no-op. Also: when the compositor applies HOLD locally first and the backend refuses it (`REVISION_CONFLICT`), the compositor stays holding and the next snapshot re-syncs; a banner shows the refusal.
-- **B:** `GET /api/v1/guests/readiness` (#20) is not consumed by the compositor yet. Once #20 lands, D shows `disclosure` in the mode strip and records the naming policy in the Stage 4 exit-gate row.
+- **B:** `GET /api/v1/guests/readiness` is now read every 5 s and shown in the mode strip (done in the Stage 4 integration). The same integration fixed the Stage 3 evidence poll, which sent `event_id` where B's routes take `eventId`; `producer/guestApi.ts` is now the one place the guest URLs live.
 - **C:** live cue latency (plan: 30 positive cues, p95 under 2.5 s from the final word) pairs C's decision log with the compositor's acknowledgement timeline. The export's `acks` carry `issuerDecisionId`, `atMs` (renderer clock) and the wall-clock export time; `scripts/latency_report.py --acks` is the join point.
 
 ## 8. Runbook
