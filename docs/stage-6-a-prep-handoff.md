@@ -1,4 +1,8 @@
-# Person A Stage 6 preliminary handoff
+# Person A Stage 6 preliminary handoff (superseded)
+
+The integrated Stage 6 handoff is in
+[`stage-6-a-handoff.md`](stage-6-a-handoff.md). This file remains as the
+pre-Stage-5 integration record.
 
 Branch: `codex/person-a-stage-6-prep`
 
