@@ -21,6 +21,9 @@ tests/**/results_*.json
 # C-lane: semantic evaluation results are per-run artifacts, not source.
 scripts/results_*.json
 
+# Stage 5 approval can reference private evidence; commit only its blank template.
+docs/results/stage5-release-approval.json
+
 # Vision model weights: downloaded per machine, never committed.
 models/
 *.onnx
