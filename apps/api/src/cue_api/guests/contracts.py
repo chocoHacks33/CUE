@@ -264,6 +264,8 @@ class IdentityReadinessResponse(ContractModel):
     disclosure: str
     blocking_reasons: list[str]
     attestations: dict[str, str] = Field(default_factory=dict)
+    #: Stage 7's re-check against today's conditions, or null if nobody has run it.
+    morning_validation: dict[str, object] | None = None
 
 
 class GuestListResponse(ContractModel):

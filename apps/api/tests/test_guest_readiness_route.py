@@ -15,7 +15,13 @@ from fastapi.testclient import TestClient
 from cue_api.guests.calibration_store import save
 from cue_api.guests.confidence_calibration import PROVISIONAL_CALIBRATION, Calibration
 from cue_api.guests.identity_eval import NegativeTrial, PositiveTrial, summarise
-from cue_api.guests.identity_evidence import Attestation, AttestationError, IdentityEvidence, gather
+from cue_api.guests.identity_evidence import (
+    Attestation,
+    AttestationError,
+    IdentityEvidence,
+    gather,
+)
+from cue_api.guests.morning_validation import CheckOutcome, MorningValidation
 from cue_api.guests.types import CalibrationStatus
 from cue_api.main import create_app
 from cue_api.settings import Settings
@@ -73,12 +79,25 @@ def readiness(client: TestClient) -> dict:
     return response.json()
 
 
+def validated_today() -> MorningValidation:
+    from datetime import date
+
+    return MorningValidation(
+        validated_on=date.today(),
+        validated_by="B",
+        re_enrolment=CheckOutcome.PASSED,
+        reframe=CheckOutcome.PASSED,
+        unknown_rejection=CheckOutcome.PASSED,
+    )
+
+
 def everything() -> IdentityEvidence:
     return IdentityEvidence(
         calibration=MEASURED,
         report=clean_report(),
         mac_runtime_gate=Attestation("D", "docs/results/b-media-check.md"),
         media_checks=Attestation("B", "docs/results/b-media-check.md"),
+        morning_validation=validated_today(),
     )
 
 
@@ -93,7 +112,7 @@ def test_with_no_evidence_the_route_reports_role_based() -> None:
     assert body["unattendedNamingPermitted"] is False
     assert body["calibrationStatus"] == "PROVISIONAL_DEFAULT"
     assert "Nothing on screen is identified by face" in body["disclosure"]
-    assert len(body["blockingReasons"]) == 4
+    assert len(body["blockingReasons"]) == 5
     assert body["attestations"] == {}
 
 
@@ -140,6 +159,7 @@ def test_one_wrong_name_reports_role_based_through_the_route() -> None:
         report=clean_report(wrong_person=1),
         mac_runtime_gate=Attestation("D", "docs/results/b-media-check.md"),
         media_checks=Attestation("B", "docs/results/b-media-check.md"),
+        morning_validation=validated_today(),
     )
 
     body = readiness(client_with(evidence))
@@ -154,6 +174,7 @@ def test_a_missing_attestation_downgrades_to_assist() -> None:
         report=clean_report(),
         mac_runtime_gate=Attestation("D", "docs/results/b-media-check.md"),
         media_checks=None,
+        morning_validation=validated_today(),
     )
 
     body = readiness(client_with(evidence))

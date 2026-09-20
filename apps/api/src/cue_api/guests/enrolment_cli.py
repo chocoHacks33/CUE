@@ -391,6 +391,65 @@ def _verify_cleanup_command(args: argparse.Namespace) -> int:
     return 0
 
 
+def _morning_check_command(args: argparse.Namespace) -> int:
+    """Record Stage 7's re-validation against today's conditions.
+
+    Exits non-zero if any check failed, because a failed morning check means a
+    capability has to be disabled and disclosed, not noted and moved past.
+    """
+    from datetime import date
+
+    from cue_api.guests.morning_validation import (
+        CheckOutcome,
+        MorningValidation,
+        MorningValidationError,
+        validation_lines,
+    )
+
+    try:
+        validation = MorningValidation(
+            validated_on=date.today(),
+            validated_by=args.by,
+            re_enrolment=CheckOutcome(args.re_enrolment),
+            reframe=CheckOutcome(args.reframe),
+            unknown_rejection=CheckOutcome(args.unknown_rejection),
+            note=args.note or "",
+        )
+    except MorningValidationError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+
+    today = date.today()
+    for line in validation_lines(validation, today):
+        print(line)
+
+    if args.out:
+        document = json.dumps(validation.to_document(), indent=2) + chr(10)
+        Path(args.out).write_text(document, "utf-8")
+        print(f"written to:   {args.out}")
+
+    if validation.failures:
+        print()
+        print(
+            "A capability failed today. Leave identity naming off, disclose it, and "
+            "update the saved submission.",
+            file=sys.stderr,
+        )
+        return 1
+    if not validation.all_passed:
+        # Consistent with `evaluate` and `verify-cleanup`: a run that did not
+        # establish its claim does not report success, or a half-finished check at
+        # 08:40 reads as a green light.
+        print()
+        print(
+            "Not every check was run, so today's conditions are unconfirmed. "
+            "Unattended naming stays off until all three pass.",
+            file=sys.stderr,
+        )
+        return 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cue-guests", description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -475,6 +534,19 @@ def build_parser() -> argparse.ArgumentParser:
         "--out", help="write the cleanup record here for the results doc"
     )
     verify_cleanup.set_defaults(handler=_verify_cleanup_command)
+
+    outcomes = ("PASSED", "FAILED", "NOT_RUN")
+    morning = subparsers.add_parser(
+        "morning-check",
+        help="record Stage 7's re-validation against today's conditions",
+    )
+    morning.add_argument("--by", required=True, help="who ran the checks")
+    morning.add_argument("--re-enrolment", choices=outcomes, default="NOT_RUN")
+    morning.add_argument("--reframe", choices=outcomes, default="NOT_RUN")
+    morning.add_argument("--unknown-rejection", choices=outcomes, default="NOT_RUN")
+    morning.add_argument("--note", help="conditions worth recording, e.g. the lighting")
+    morning.add_argument("--out", help="write the record here for the results doc")
+    morning.set_defaults(handler=_morning_check_command)
 
     return parser
 
