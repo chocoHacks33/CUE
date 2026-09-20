@@ -82,6 +82,8 @@ class DeepgramStream:
         self._last_chunk_at: float | None = None
         self._last_dg_msg_at: float | None = None
         self._speech_down = False
+        self._last_provider_error: str | None = None
+        self.provider_failure_count = 0
         self.rejected_reasons: list[str] = []
         self.resamples: int = 0
 
@@ -100,7 +102,16 @@ class DeepgramStream:
             self._on_new_epoch(chunk)
 
         pcm = self._to_target_pcm(chunk)
-        self._conn.send_media(pcm)
+        try:
+            self._conn.send_media(pcm)
+        except Exception as error:  # noqa: BLE001 -- provider failure must not stop media
+            self.provider_failure_count += 1
+            self._last_provider_error = type(error).__name__
+            self._last_chunk_at = now
+            if not self._speech_down:
+                self._speech_down = True
+                events.append(SpeechEvent(kind="speech_down", audio_epoch=self._current_epoch))
+            return events
         self._last_chunk_at = now
         # Fresh audio; if transcripts resume the next DG message will bring
         # us back up. The SPEECH_UP event fires on the DG-message path
@@ -125,6 +136,7 @@ class DeepgramStream:
                 kind="speech_up", audio_epoch=self._current_epoch,
             ))
         self._last_dg_msg_at = now
+        self._last_provider_error = None
         events.extend(self._to_speech_event(e) for e in asm_events)
         return events
 
@@ -160,6 +172,10 @@ class DeepgramStream:
     @property
     def speech_down(self) -> bool:
         return self._speech_down
+
+    @property
+    def last_provider_error(self) -> str | None:
+        return self._last_provider_error
 
     # ---- internals -----------------------------------------------------
 

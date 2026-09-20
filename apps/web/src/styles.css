@@ -683,3 +683,30 @@ footer {
 .evidence-unknown strong { color: #c7cee2; }
 .evidence-none strong { color: #8d95b3; }
 .evidence-stale strong { color: #8d95b3; text-decoration: line-through; }
+
+/* Stage 4 measurements */
+.stage4 {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid #2a3147;
+  padding-top: 12px;
+}
+
+.stage4 h3 {
+  margin: 0;
+}
+
+.checks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+  font-size: 0.84rem;
+}
+
+.gate-pass { color: #8ee6a1; }
+.gate-fail { color: #ffb3b0; font-weight: 700; }
+.gate-review { color: #ffd27a; }
+.gate-insufficient,
+.gate-unmeasured { color: #b9c0d4; }

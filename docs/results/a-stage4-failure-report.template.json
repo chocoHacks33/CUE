@@ -1,0 +1,36 @@
+{
+  "trials": [
+    {
+      "trialId": "event-access-01",
+      "area": "EVENT_ACCESS",
+      "passed": true,
+      "evidenceKind": "AUTOMATED",
+      "latencyMs": null,
+      "detail": "Invalid and cross-event control sessions are refused before authentication"
+    },
+    {
+      "trialId": "observer-ack-01",
+      "area": "OBSERVER_CONTROL",
+      "passed": true,
+      "evidenceKind": "AUTOMATED",
+      "latencyMs": null,
+      "detail": "OBSERVER render.ack is refused with OBSERVER_READ_ONLY"
+    },
+    {
+      "trialId": "observer-reconcile-01",
+      "area": "OBSERVER_CONTROL",
+      "passed": true,
+      "evidenceKind": "AUTOMATED",
+      "latencyMs": null,
+      "detail": "OBSERVER render.reconcile is refused with OBSERVER_READ_ONLY"
+    },
+    {
+      "trialId": "observer-readiness-01",
+      "area": "OBSERVER_CONTROL",
+      "passed": true,
+      "evidenceKind": "AUTOMATED",
+      "latencyMs": null,
+      "detail": "OBSERVER receiver.readiness is refused with OBSERVER_READ_ONLY"
+    }
+  ]
+}
