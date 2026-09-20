@@ -1,0 +1,47 @@
+{
+  "_note": "Freeze of the four guests who will really be in the demo. Aliases are the strings the parser must accept as pointing at the same guest_id. The role field controls the role_based mapping the director uses when identity is ROLE_BASED.",
+  "guests": [
+    {
+      "id": "sarah",
+      "name": "Sarah Tan",
+      "aliases": ["Sarah", "Ms Tan"],
+      "role": "guest of honour",
+      "pronoun_subject": "She",
+      "pronoun_be_past": "was",
+      "camera_hint": "CAM-GUEST"
+    },
+    {
+      "id": "daniel",
+      "name": "Daniel Reyes",
+      "aliases": ["Daniel", "Dan"],
+      "role": "speaker",
+      "pronoun_subject": "He",
+      "pronoun_be_past": "was",
+      "camera_hint": "CAM-GUEST"
+    },
+    {
+      "id": "priya",
+      "name": "Priya Shah",
+      "aliases": ["Priya"],
+      "role": "judge",
+      "pronoun_subject": "She",
+      "pronoun_be_past": "was",
+      "camera_hint": "CAM-GUEST"
+    },
+    {
+      "id": "maya",
+      "name": "Maya Chen",
+      "aliases": ["Maya", "Ms Chen"],
+      "role": "keynote",
+      "pronoun_subject": "She",
+      "pronoun_be_past": "was",
+      "camera_hint": "CAM-GUEST"
+    }
+  ],
+  "role_map": {
+    "sarah": "CAM-GUEST",
+    "daniel": "CAM-GUEST",
+    "priya": "CAM-GUEST",
+    "maya": "CAM-GUEST"
+  }
+}

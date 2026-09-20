@@ -6,7 +6,7 @@
 - Duplicate `decision_seq`s: 0
 - Max queue depth: 1
 - Memory: 0.0 MB → 0.0 MB (Δ 0.0 MB)
-- Log size: 57252 bytes
+- Log size: 59307 bytes
 
 ## Invariants
 | Invariant | Result |
