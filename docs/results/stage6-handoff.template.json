@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "commit": "REPLACE_WITH_FULL_GIT_COMMIT",
+  "fromOwner": "A",
+  "toOwner": "D",
+  "releaseMode": "ROLE_BASED_ASSIST",
+  "hardwareStatus": "NEEDS_REVALIDATION",
+  "resumeAtUtc": "REPLACE_WITH_ISO_8601_TIME_AFTER_VENUE_REOPENS",
+  "knownBlockers": [
+    "REPLACE_WITH_CONCRETE_BLOCKER"
+  ],
+  "morningFirstActions": [
+    "Confirm current organizer and venue announcements",
+    "Reconnect and physically verify CAM-HOST, CAM-GUEST and CAM-WIDE",
+    "Revalidate A-only programme audio and recording playback"
+  ],
+  "completedOfflineWork": [
+    "REPLACE_WITH_DOCUMENTATION_OR_OFFLINE_REGRESSION_COMPLETED"
+  ],
+  "acknowledgements": {
+    "noNewMediaArchitecture": true,
+    "noModelMigration": true,
+    "noHardwareClaim": true,
+    "venueRulesChecked": true,
+    "handoffAgreed": false
+  }
+}
