@@ -272,7 +272,16 @@ def build_control_websocket(
                         "state": state.model_dump(mode="json", by_alias=True),
                     },
                 )
-        except (TimeoutError, WebSocketDisconnect, ControlError):
+        except ControlError as error:
+            if role is None:
+                try:
+                    await websocket.send_json(
+                        {"type": "control.error", "code": error.code, "message": str(error)}
+                    )
+                    await websocket.close(code=1008)
+                except RuntimeError:
+                    pass
+        except (TimeoutError, WebSocketDisconnect):
             if role is None:
                 try:
                     await websocket.close(code=1008)

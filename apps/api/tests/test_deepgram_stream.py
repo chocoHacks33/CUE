@@ -35,6 +35,18 @@ class FakeConn:
         self.sent.append(pcm)
 
 
+class FailingConn(FakeConn):
+    def __init__(self, failures: int) -> None:
+        super().__init__()
+        self.failures = failures
+
+    def send_media(self, pcm: bytes) -> None:
+        if self.failures > 0:
+            self.failures -= 1
+            raise TimeoutError("Deepgram unavailable")
+        super().send_media(pcm)
+
+
 def _chunk(
     seq: int,
     offset: int,
@@ -237,6 +249,44 @@ def test_default_speech_down_timeout_five_seconds():
     assert not any(e.kind == "speech_down" for e in events)
     events = ds.tick(now=100.0 + DEFAULT_SPEECH_DOWN_TIMEOUT_S + 0.1)
     assert any(e.kind == "speech_down" for e in events)
+
+
+def test_provider_send_failure_degrades_without_crashing_or_repeating_down() -> None:
+    conn = FailingConn(failures=2)
+    ds = DeepgramStream(conn, Assembler(audio_epoch=1))
+
+    first = ds.feed(_chunk(0, 0), now=10.0)
+    second = ds.feed(_chunk(1, 160), now=10.1)
+
+    assert [event.kind for event in first] == ["speech_down"]
+    assert second == []
+    assert ds.speech_down is True
+    assert ds.provider_failure_count == 2
+    assert ds.last_provider_error == "TimeoutError"
+
+
+def test_provider_is_only_up_after_a_real_provider_message() -> None:
+    conn = FailingConn(failures=1)
+    ds = DeepgramStream(conn, Assembler(audio_epoch=1))
+    ds.feed(_chunk(0, 0), now=10.0)
+    assert ds.speech_down is True
+
+    assert ds.feed(_chunk(1, 160), now=10.1) == []
+    assert ds.speech_down is True
+    events = ds.on_deepgram_message(
+        {
+            "type": "Results",
+            "start": 0.0,
+            "duration": 0.1,
+            "is_final": False,
+            "speech_final": False,
+            "channel": {"alternatives": [{"transcript": "back"}]},
+        },
+        now=10.2,
+    )
+    assert "speech_up" in [event.kind for event in events]
+    assert ds.speech_down is False
+    assert ds.last_provider_error is None
 
 
 # ---- resampler unit tests ------------------------------------------------
