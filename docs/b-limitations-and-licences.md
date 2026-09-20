@@ -62,6 +62,11 @@ taken on trust.
   drawn-face variant scored 0.78–0.93 cosine against an unrelated reference,
   because SFace is trained on photographs and collapses drawings together. A
   passing synthetic suite is therefore not evidence of recognition.
+- **No validation against today's conditions.** The gate requires B's three Stage 7
+  checks — reframe, re-enrolment after a restart, and unknown rejection in the
+  current lighting — to be re-run and recorded **each day**, because moving a laptop
+  changes framing and a room's light changes with the hour. None has been run. See
+  [`docs/results/b-stage-7-morning-check.md`](results/b-stage-7-morning-check.md).
 
 ## Privacy posture
 
@@ -71,7 +76,10 @@ taken on trust.
 - Reference photos stay on the enrolling laptop and are deleted after enrolment.
   Only the 128-float embedding is transmitted.
 - No database, no disk persistence. A backend restart clears every embedding and
-  requires re-enrolment. That is the default, not an unfinished feature.
+  requires re-enrolment. That is the default, not an unfinished feature, and it is
+  **demonstrated** rather than asserted: after a restart the gallery is empty, the
+  guest record is gone entirely, and re-attaching a reference to the vanished guest
+  is refused, so re-enrolment means a fresh consent conversation.
 - Embeddings never enter a language-model request or an operational log.
 - An unknown face stays unknown. Two faces that score too closely produce an
   abstention, not the better guess.
@@ -131,6 +139,10 @@ builds and tests on every machine in the team.
 - **Identity naming is currently switched off, because we have not measured it.**
   Cameras are chosen by role. You can check that at
   `GET /api/v1/guests/readiness`.
+- That gate re-validates **daily**: even with every other piece of evidence in
+  place, naming stays off until today's three checks have been run and recorded.
+  A check that fails switches naming off on its own rather than relying on somebody
+  remembering to.
 
 **Will not say:**
 

@@ -62,6 +62,7 @@ Person B's work is one document per stage:
 - [docs/b-stage-6-prep.md](docs/b-stage-6-prep.md) — the overnight handoff, and `python scripts/b_offline_regression.py`
 - [docs/b-stage-6.md](docs/b-stage-6.md) — the overnight check, run and filed; no code, on purpose
 - [docs/b-stage-7-prep.md](docs/b-stage-7-prep.md) — the morning re-validation channel: a failure today disables naming
+- [docs/b-stage-7.md](docs/b-stage-7.md) — the morning checks: memory-clearing restart demonstrated, the other two NOT RUN
 
 B's submission statement, written for a sceptical reader: [docs/b-limitations-and-licences.md](docs/b-limitations-and-licences.md). On the night, use [docs/b-run-sheet.md](docs/b-run-sheet.md).
 
