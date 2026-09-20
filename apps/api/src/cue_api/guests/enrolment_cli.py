@@ -356,17 +356,23 @@ def _load_capture(cv2, decoded_frame, capture_type, image_path: str, guest_id: s
     return capture_type(label=image_path, frame=frame, guest_id=guest_id)
 
 
-def _end_event_command(args: argparse.Namespace) -> int:
-    """Purge an event's consented data, then read it back and prove it is gone.
+def _verify_cleanup_command(args: argparse.Namespace) -> int:
+    """Read an event back and prove its consented data is gone.
 
-    Exits non-zero if anything survived, because a cleanup nobody verified is
-    indistinguishable from one that did not happen.
+    Deliberately not called `end-event`: A's `POST /api/v1/events/{id}/end` is the
+    authoritative end of an event and also revokes sessions and deletes bindings,
+    which this does not. Run this after it, to check the result.
+
+    `--purge` deletes guest data first, for a guest-only cleanup mid-event.
+
+    Exits non-zero unless the re-read verified everything clean, because a cleanup
+    nobody verified is indistinguishable from one that did not happen.
     """
     from cue_api.guests.cleanup import cleanup_lines, run_cleanup
 
     client = GuestBackendClient(args.api, args.secret)
     try:
-        record = run_cleanup(client, args.event)
+        record = run_cleanup(client, args.event, purge=args.purge)
     except BackendError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
@@ -380,7 +386,7 @@ def _end_event_command(args: argparse.Namespace) -> int:
         print(f"written to:   {args.out}")
 
     if not record.clean:
-        print("Consented data survived the purge.", file=sys.stderr)
+        print("Consented data is still present.", file=sys.stderr)
         return 1
     return 0
 
@@ -455,12 +461,20 @@ def build_parser() -> argparse.ArgumentParser:
     trials.add_argument("--out", default="trials.json")
     trials.set_defaults(handler=_trials_command)
 
-    end_event = subparsers.add_parser(
-        "end-event", help="purge an event's consented data and verify nothing remains"
+    verify_cleanup = subparsers.add_parser(
+        "verify-cleanup",
+        help="read an event back and prove its consented data is gone",
     )
-    add_backend_arguments(end_event)
-    end_event.add_argument("--out", help="write the cleanup record here for the results doc")
-    end_event.set_defaults(handler=_end_event_command)
+    add_backend_arguments(verify_cleanup)
+    verify_cleanup.add_argument(
+        "--purge",
+        action="store_true",
+        help="purge guest data first; omit after A's /events/{id}/end, which already did",
+    )
+    verify_cleanup.add_argument(
+        "--out", help="write the cleanup record here for the results doc"
+    )
+    verify_cleanup.set_defaults(handler=_verify_cleanup_command)
 
     return parser
 

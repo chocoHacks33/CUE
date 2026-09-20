@@ -14,6 +14,8 @@ import { bindingForCamera, claimIsLive, claimNeedsDecision, formatExpiry, sortCl
 export interface PairingPanelProps {
   apiBaseUrl: string;
   eventId: string;
+  /** Entered once on the producer page; never stored, never sent to publishers. */
+  producerSecret: string;
   /** Called with a one-line message for the receiver log. */
   onLog: (line: string) => void;
 }
@@ -25,13 +27,12 @@ const POLL_MS = 2000;
  * typed here, kept in component state only, and sent as a header to producer
  * endpoints. It never appears in a pairing token, URL or publisher form.
  */
-export function PairingPanel({ apiBaseUrl, eventId, onLog }: PairingPanelProps) {
-  const [producerSecret, setProducerSecret] = useState("");
+export function PairingPanel({ apiBaseUrl, eventId, producerSecret, onLog }: PairingPanelProps) {
   const [grants, setGrants] = useState<Partial<Record<CameraId, PairingGrantResponse>>>({});
   const [claims, setClaims] = useState<ProducerPairingClaimResponse[]>([]);
   const [bindings, setBindings] = useState<CameraBinding[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
-  const [message, setMessage] = useState("Enter the producer secret from this Mac's .env to mint pairing tokens.");
+  const [message, setMessage] = useState("Enter the producer secret in the session panel to mint pairing tokens.");
   const [polling, setPolling] = useState(false);
   const lastSeenRef = useRef<Map<string, string>>(new Map());
 
@@ -131,16 +132,6 @@ export function PairingPanel({ apiBaseUrl, eventId, onLog }: PairingPanelProps) 
         </span>
       </div>
 
-      <label>
-        Producer secret (this Mac only)
-        <input
-          type="password"
-          value={producerSecret}
-          autoComplete="off"
-          onChange={(event) => setProducerSecret(event.target.value)}
-        />
-      </label>
-
       <div className="pairing-slots">
         {CAMERA_IDS.map((cameraId) => {
           const contract = CAMERA_CONTRACTS[cameraId];
@@ -197,6 +188,8 @@ export function PairingPanel({ apiBaseUrl, eventId, onLog }: PairingPanelProps) 
                   <dd>{binding.deviceSessionId}</dd>
                   <dt>Stream epoch</dt>
                   <dd>{binding.streamEpoch}</dd>
+                  <dt>Binding revision</dt>
+                  <dd>{binding.bindingRevision}</dd>
                   <dt>Video SID</dt>
                   <dd>{binding.currentVideoTrackSid ?? "not yet published"}</dd>
                 </dl>

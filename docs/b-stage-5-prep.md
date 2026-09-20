@@ -16,35 +16,65 @@ rather than measure, so they are done here. The third needs trials nobody has ru
 
 ## Cleanup that can prove itself
 
-Deleting was already implemented and tested: `DELETE /api/v1/guests` purges an
-event and returns a receipt counting what went. The half that was missing is the
-one a guest is actually owed.
+Two things already delete consented data, and **neither reads it back**:
 
-**"We deleted it" and "we went back and checked it was gone" are different
-claims.** A purge that silently half-succeeded looks identical to one that worked,
-if nobody re-reads. So `cue-guests end-event` purges, then reads the event back
-through the same public routes and states what it found:
+- **A's `POST /api/v1/events/{id}/end`** — the authoritative end of an event. It
+  purges guest records and observations *and* revokes control sessions, deletes
+  grants, claims and bindings, and sets the mode to `ENDED`.
+- **B's `DELETE /api/v1/guests`** — guest data alone, mid-event.
+
+That gap is what this fills. **"We deleted it" and "we went back and checked it was
+gone" are different claims**, and a purge that silently half-succeeded looks
+identical to one that worked if nobody re-reads.
+
+### It is called `verify-cleanup`, not `end-event`
+
+A's endpoint landed on trunk while this branch was open, and it already purges
+guest data. A B command called `end-event` would have been actively dangerous:
+somebody runs it at the real event end, believes the event is ended, and leaves
+sessions live, bindings in place and the mode not `ENDED`. So B's command verifies
+by default and only purges when asked:
+
+```bash
+# normal: right after A's authoritative end, just prove it worked
+cue-guests verify-cleanup --api … --event … --out docs/results/b-cleanup-record.json
+
+# guest-only cleanup mid-event
+cue-guests verify-cleanup --api … --event … --purge
+```
+
+Run against a live server, in the real order — enrol a guest, post an observation,
+call A's end, then verify:
 
 ```
 event:        hackmit-demo
-guests:       1 purged
-references:   1 deleted
-observations: 1 dropped
+purge:        not by this command — verifying only
 verified:     worker gallery holds no embeddings
 verified:     no guest records remain
 verified:     no camera holds live evidence
-verdict:      clean — re-read found nothing remaining
+verdict:      clean — re-read found nothing remaining          exit 0
 ```
 
-That is a real run against a live server, after enrolling a guest and posting an
-observation so there was something to clean. It writes a filable record:
+And before anything was purged, the same command refuses:
+
+```
+verdict:      NOT CLEAN — consented data is still present:
+              - worker gallery: guest-sarah still has 1 embedding(s)
+              - guest record: guest-sarah still reports 1 reference(s)
+              - guest record: guest-sarah still claims consent after the event ended
+              - live evidence: CAM-GUEST still holds an observation     exit 1
+```
+
+It writes a filable record:
 
 ```json
 {
   "eventId": "hackmit-demo",
-  "guestsPurged": ["guest-sarah"],
-  "referencesDeleted": 1,
-  "observationsDropped": 1,
+  "guestsPurged": [],
+  "referencesDeleted": 0,
+  "observationsDropped": 0,
+  "purgedAtMs": 0,
+  "purgedHere": false,
   "clean": true,
   "verificationComplete": true,
   "checksRun": ["gallery", "guest_records", "live_evidence"],
@@ -53,6 +83,10 @@ observation so there was something to clean. It writes a filable record:
   "remaining": []
 }
 ```
+
+The zeros are correct and deliberate: this run verified somebody else's deletion, so
+it reports no deletions of its own rather than taking credit for A's. A test pins
+that (`test_a_verify_only_record_does_not_claim_deletions_it_did_not_make`).
 
 ### Three places data could survive, all re-read
 
@@ -81,7 +115,9 @@ verdict:      UNVERIFIED — these checks never ran: live_evidence
 
 And the command exits non-zero on anything other than a verified-clean result,
 because a cleanup nobody verified is indistinguishable from a cleanup that did not
-happen.
+happen. A verify-only failure says "consented data is still present" rather than
+"survived the purge", because this run did not purge anything and should not imply
+it did.
 
 ### The receipt is not the evidence
 
@@ -110,7 +146,7 @@ paragraph that **identity naming is currently switched off** and points at
 
 | File | Tests |
 |---|---|
-| `tests/test_guest_cleanup.py` | 16 |
+| `tests/test_guest_cleanup.py` | 20 |
 
 The ones that matter drive a backend that **lies by omission** — reporting a
 successful purge while still holding an embedding, a reference count, or live
@@ -121,13 +157,16 @@ evidence — and check the record catches it.
 Windows 11, Python 3.14.7:
 
 ```
-cd apps/api && python -m pytest -q     ->  574 passed
+cd apps/api && python -m pytest -q     ->  617 passed
 cd apps/api && python -m ruff check .  ->  All checks passed
 ruff --target-version py311            ->  All checks passed
-cue-guests end-event (live server)     ->  clean, exit 0, record written
+verify-cleanup before any purge        ->  NOT CLEAN, 4 findings, exit 1
+A's /events/{id}/end, then verify      ->  clean, exit 0, record written
 ```
 
-That 574 is the whole backend suite; B owns 361, of which 16 are new here.
+That 617 is the whole backend suite, and it grew because A's and C's Stage 3
+integration merged into trunk while this branch was open. B owns 365, of which 20
+are new here.
 
 ## What this does NOT establish
 
@@ -147,8 +186,9 @@ Still needed, all hardware:
 3. A measured calibration.
 4. B's media checks.
 
-At the real event end, `cue-guests end-event --out docs/results/b-cleanup-record.json`
-files the evidence that consented data was destroyed.
+At the real event end: call A's `POST /api/v1/events/{id}/end`, then
+`cue-guests verify-cleanup --out docs/results/b-cleanup-record.json` to file the
+evidence that consented data was actually destroyed.
 
 Earlier stages: [b-stage-0.md](b-stage-0.md),
 [b-stage-prep-1.md](b-stage-prep-1.md), [b-stage-1.md](b-stage-1.md),

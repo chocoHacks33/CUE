@@ -72,7 +72,7 @@ def withdrawn_stub(guest_id: str = "guest-sarah") -> dict[str, Any]:
 
 
 def test_a_complete_cleanup_reports_clean_and_shows_its_work() -> None:
-    record = run_cleanup(FakeBackend(), "hackmit-demo")
+    record = run_cleanup(FakeBackend(), "hackmit-demo", purge=True)
 
     assert record.clean is True
     assert record.remaining == []
@@ -87,7 +87,7 @@ def test_a_withdrawn_stub_with_nothing_attached_is_acceptable() -> None:
     """The record of a withdrawal may remain; what it must not hold is data."""
     backend = FakeBackend(guests_after=[withdrawn_stub()])
 
-    record = run_cleanup(backend, "hackmit-demo")
+    record = run_cleanup(backend, "hackmit-demo", purge=True)
 
     assert record.clean is True
     assert any("no references and no consent" in check for check in record.verified)
@@ -96,9 +96,45 @@ def test_a_withdrawn_stub_with_nothing_attached_is_acceptable() -> None:
 def test_the_purge_happens_exactly_once() -> None:
     backend = FakeBackend()
 
-    run_cleanup(backend, "hackmit-demo")
+    run_cleanup(backend, "hackmit-demo", purge=True)
 
     assert backend.purges == 1
+
+
+def test_verifying_only_is_the_default_and_deletes_nothing() -> None:
+    """After A's /events/{id}/end the data is already gone; do not purge again."""
+    backend = FakeBackend()
+
+    record = run_cleanup(backend, "hackmit-demo")
+
+    assert backend.purges == 0
+    assert record.purged_here is False
+    assert record.clean is True
+    assert record.guests_purged == []
+
+
+def test_verifying_only_still_catches_data_that_survived() -> None:
+    backend = FakeBackend(
+        gallery_after=ReferenceGallery(
+            version=9, guests=(GuestReferences("guest-sarah", "Sarah", 1, (SARAH,)),)
+        )
+    )
+
+    record = run_cleanup(backend, "hackmit-demo")
+
+    assert backend.purges == 0
+    assert record.clean is False
+    assert record.remaining[0].where == "worker gallery"
+
+
+def test_a_verify_only_record_does_not_claim_deletions_it_did_not_make() -> None:
+    record = run_cleanup(FakeBackend(), "hackmit-demo")
+    document = record.to_document()
+
+    assert document["purgedHere"] is False
+    assert document["referencesDeleted"] == 0
+    assert document["observationsDropped"] == 0
+    assert "verifying only" in chr(10).join(cleanup_lines(record))
 
 
 # -- the cases that matter: a purge that half-succeeded -------------------
@@ -112,7 +148,7 @@ def test_an_embedding_left_in_the_gallery_is_caught() -> None:
         )
     )
 
-    record = run_cleanup(backend, "hackmit-demo")
+    record = run_cleanup(backend, "hackmit-demo", purge=True)
 
     assert record.clean is False
     assert record.remaining[0].where == "worker gallery"
@@ -124,7 +160,7 @@ def test_a_guest_still_holding_a_reference_is_caught() -> None:
         guests_after=[{**withdrawn_stub(), "referenceCount": 2}]
     )
 
-    record = run_cleanup(backend, "hackmit-demo")
+    record = run_cleanup(backend, "hackmit-demo", purge=True)
 
     assert record.clean is False
     assert any("still reports 2 reference" in item.detail for item in record.remaining)
@@ -136,7 +172,7 @@ def test_a_guest_still_claiming_consent_after_the_event_is_caught() -> None:
         guests_after=[{**withdrawn_stub(), "consent": {"granted": True}}]
     )
 
-    record = run_cleanup(backend, "hackmit-demo")
+    record = run_cleanup(backend, "hackmit-demo", purge=True)
 
     assert record.clean is False
     assert any("still claims consent" in item.detail for item in record.remaining)
@@ -151,7 +187,7 @@ def test_live_evidence_left_on_a_camera_is_caught() -> None:
         ]
     )
 
-    record = run_cleanup(backend, "hackmit-demo")
+    record = run_cleanup(backend, "hackmit-demo", purge=True)
 
     assert record.clean is False
     assert record.remaining[0].where == "live evidence"
@@ -168,7 +204,7 @@ def test_every_surviving_item_is_listed_not_just_the_first() -> None:
         cameras_after=[{"cameraId": "CAM-GUEST", "observation": {"observationId": "x"}}],
     )
 
-    record = run_cleanup(backend, "hackmit-demo")
+    record = run_cleanup(backend, "hackmit-demo", purge=True)
 
     assert record.clean is False
     assert {item.where for item in record.remaining} == {
@@ -193,7 +229,7 @@ def test_a_receipt_claiming_deletions_does_not_make_a_run_clean() -> None:
         ),
     )
 
-    record = run_cleanup(backend, "hackmit-demo")
+    record = run_cleanup(backend, "hackmit-demo", purge=True)
 
     assert record.references_deleted == 99
     assert record.clean is False
@@ -203,7 +239,7 @@ def test_a_receipt_claiming_deletions_does_not_make_a_run_clean() -> None:
 
 
 def test_the_document_is_filed_with_a_verdict() -> None:
-    document = run_cleanup(FakeBackend(), "hackmit-demo").to_document()
+    document = run_cleanup(FakeBackend(), "hackmit-demo", purge=True).to_document()
 
     assert document["clean"] is True
     assert document["eventId"] == "hackmit-demo"
@@ -217,14 +253,27 @@ def test_a_failed_cleanup_says_what_survived() -> None:
         cameras_after=[{"cameraId": "CAM-GUEST", "observation": {"observationId": "x"}}]
     )
 
-    text = "\n".join(cleanup_lines(run_cleanup(backend, "hackmit-demo")))
+    text = "\n".join(cleanup_lines(run_cleanup(backend, "hackmit-demo", purge=True)))
 
     assert "NOT CLEAN" in text
+    assert "survived the purge" in text  # this run did purge
     assert "CAM-GUEST still holds an observation" in text
 
 
+def test_a_verify_only_failure_does_not_blame_a_purge_it_never_made() -> None:
+    backend = FakeBackend(
+        cameras_after=[{"cameraId": "CAM-GUEST", "observation": {"observationId": "x"}}]
+    )
+
+    text = chr(10).join(cleanup_lines(run_cleanup(backend, "hackmit-demo")))
+
+    assert "NOT CLEAN" in text
+    assert "is still present" in text
+    assert "survived the purge" not in text
+
+
 def test_a_clean_cleanup_says_it_was_re_read() -> None:
-    text = "\n".join(cleanup_lines(run_cleanup(FakeBackend(), "hackmit-demo")))
+    text = "\n".join(cleanup_lines(run_cleanup(FakeBackend(), "hackmit-demo", purge=True)))
 
     assert "clean — re-read found nothing remaining" in text
     assert "NOT CLEAN" not in text
@@ -252,7 +301,7 @@ def test_a_partial_verification_is_not_clean_either() -> None:
 
 
 def test_a_run_cleanup_record_has_run_every_required_check() -> None:
-    record = run_cleanup(FakeBackend(), "hackmit-demo")
+    record = run_cleanup(FakeBackend(), "hackmit-demo", purge=True)
 
     assert record.checks_run == REQUIRED_CHECKS
     assert record.verification_complete is True
