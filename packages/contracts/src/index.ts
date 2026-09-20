@@ -126,6 +126,41 @@ export interface CameraBinding {
   displayName: string;
   currentVideoTrackSid: string | null;
   streamEpoch: number;
+  bindingRevision: number;
+}
+
+export type TransportOutcome =
+  | "ATTACHED"
+  | "REPUBLISHED"
+  | "DETACHED"
+  | "STALE_DETACH_IGNORED";
+
+export interface VideoTrackMutationRequest {
+  cameraId: CameraId;
+  participantIdentity: string;
+  trackSid: string;
+}
+
+export interface TransportMutationResponse {
+  binding: CameraBinding;
+  outcome: TransportOutcome;
+  epochAdvanced: boolean;
+  observationDropped: boolean;
+}
+
+export interface EventEndReceipt {
+  eventId: string;
+  alreadyEnded: boolean;
+  mode: "ENDED";
+  controlSessionsRevoked: number;
+  grantsDeleted: number;
+  claimsDeleted: number;
+  bindingsDeleted: number;
+  guestIdsDeleted: string[];
+  referencesDeleted: number;
+  observationsDropped: number;
+  readinessRemoved: boolean;
+  endedAtMs: number;
 }
 
 export function isCameraId(value: string): value is CameraId {

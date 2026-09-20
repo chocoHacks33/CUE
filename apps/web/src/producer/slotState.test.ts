@@ -2,6 +2,8 @@ import type { PublisherMetadata } from "@cue/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
+  reconcileAuthoritativeBindings,
+  applyAuthoritativeBinding,
   applyStallCheck,
   claimSlot,
   clearVideoTrack,
@@ -74,9 +76,123 @@ describe("slot assignment", () => {
     expect(again.slots["CAM-HOST"].streamEpoch).toBe(2);
     expect(again.slots["CAM-HOST"].videoTrackSid).toBe("TR_1");
   });
+
+  it("does not let stale participant metadata rewind an authoritative epoch", () => {
+    let slots = emptySlots();
+    ({ slots } = claimSlot(slots, "a", "A", metadataFor("CAM-HOST", 3), EVENT));
+    const stale = claimSlot(slots, "a", "A", metadataFor("CAM-HOST", 1), EVENT);
+
+    expect(stale.result.kind).toBe("already-assigned");
+    expect(stale.slots["CAM-HOST"].streamEpoch).toBe(3);
+  });
 });
 
 describe("republish and release", () => {
+  it("applies a higher authoritative epoch and refuses stale reconciliation", () => {
+    let slots = emptySlots();
+    ({ slots } = claimSlot(slots, "a", "A", metadataFor("CAM-HOST", 1), EVENT));
+    slots = setVideoTrack(slots, "CAM-HOST", "TR_old");
+    const binding = {
+      contractVersion: "0.1.0" as const,
+      eventId: EVENT,
+      cameraId: "CAM-HOST" as const,
+      participantIdentity: "a",
+      deviceSessionId: "device-a",
+      displayName: "A",
+      currentVideoTrackSid: "TR_new",
+      streamEpoch: 2,
+      bindingRevision: 2,
+    };
+
+    const advanced = applyAuthoritativeBinding(slots, binding, EVENT);
+    expect(advanced.result).toEqual({
+      kind: "applied",
+      cameraId: "CAM-HOST",
+      epochAdvanced: true,
+    });
+    expect(advanced.slots["CAM-HOST"].videoTrackSid).toBe("TR_new");
+    expect(advanced.slots["CAM-HOST"].previousVideoTrackSids).toEqual(["TR_old"]);
+    expect(advanced.slots["CAM-HOST"].frameCount).toBe(0);
+
+    const stale = applyAuthoritativeBinding(
+      advanced.slots,
+      { ...binding, currentVideoTrackSid: "TR_stale", streamEpoch: 1 },
+      EVENT,
+    );
+    expect(stale.result.kind).toBe("stale");
+    expect(stale.slots).toBe(advanced.slots);
+
+    const delayedSnapshot = applyAuthoritativeBinding(
+      advanced.slots,
+      {
+        ...binding,
+        currentVideoTrackSid: null,
+        streamEpoch: 2,
+        bindingRevision: 1,
+      },
+      EVENT,
+    );
+    expect(delayedSnapshot.result.kind).toBe("stale");
+    expect(delayedSnapshot.slots["CAM-HOST"].videoTrackSid).toBe("TR_new");
+  });
+
+  it("fails closed on two identities claiming the same authoritative epoch", () => {
+    let slots = emptySlots();
+    ({ slots } = claimSlot(slots, "first", "A", metadataFor("CAM-HOST", 2), EVENT));
+    const conflicting = applyAuthoritativeBinding(
+      slots,
+      {
+        contractVersion: "0.1.0",
+        eventId: EVENT,
+        cameraId: "CAM-HOST",
+        participantIdentity: "second",
+        deviceSessionId: "device-b",
+        displayName: "Other",
+        currentVideoTrackSid: "TR_other",
+        streamEpoch: 2,
+        bindingRevision: 2,
+      },
+      EVENT,
+    );
+    expect(conflicting.result).toEqual({
+      kind: "conflict",
+      cameraId: "CAM-HOST",
+      holder: "first",
+    });
+    expect(conflicting.slots).toBe(slots);
+  });
+
+  it("reconciles a complete binding snapshot and removes absent owners", () => {
+    let slots = emptySlots();
+    ({ slots } = claimSlot(slots, "old-host", "Old", metadataFor("CAM-HOST"), EVENT));
+    ({ slots } = claimSlot(slots, "guest", "B", metadataFor("CAM-GUEST"), EVENT));
+    slots = setVideoTrack(slots, "CAM-HOST", "TR_old");
+
+    const snapshot = reconcileAuthoritativeBindings(
+      slots,
+      [
+        {
+          contractVersion: "0.1.0",
+          eventId: EVENT,
+          cameraId: "CAM-GUEST",
+          participantIdentity: "guest",
+          deviceSessionId: "device-b",
+          displayName: "B",
+          currentVideoTrackSid: "TR_guest",
+          streamEpoch: 2,
+          bindingRevision: 2,
+        },
+      ],
+      EVENT,
+    );
+
+    expect(snapshot.removedCameraIds).toEqual(["CAM-HOST"]);
+    expect(snapshot.slots["CAM-HOST"].publisherIdentity).toBeNull();
+    expect(snapshot.slots["CAM-HOST"].previousVideoTrackSids).toEqual(["TR_old"]);
+    expect(snapshot.slots["CAM-GUEST"].videoTrackSid).toBe("TR_guest");
+    expect(snapshot.slots["CAM-GUEST"].streamEpoch).toBe(2);
+  });
+
   it("keeps the camera ID and remembers the old SID when the publisher leaves", () => {
     let slots = emptySlots();
     ({ slots } = claimSlot(slots, "a", "A", metadataFor("CAM-HOST"), EVENT));
