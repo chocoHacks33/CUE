@@ -56,6 +56,7 @@ Person B's work is one document per stage:
 - [docs/b-stage-3-prep.md](docs/b-stage-3-prep.md) — the measuring instrument: calibration fitting, threshold selection, identity-report tallies
 - [docs/b-stage-3.md](docs/b-stage-3.md) — carrying a fitted calibration, and the tooling that runs the held-out trials
 - [docs/b-stage-4-prep.md](docs/b-stage-4-prep.md) — the AUTO-vs-ASSIST exit gate, the consent/deletion test, and the capture envelope
+- [docs/b-stage-4.md](docs/b-stage-4.md) — the readiness endpoint, and the trials recorded as NOT RUN
 
 ```bash
 python -m pip install -e "apps/api[dev]"           # core, no OpenCV needed

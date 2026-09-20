@@ -20,12 +20,15 @@ from cue_api.guests.contracts import (
     GuestEnrolmentRequest,
     GuestListResponse,
     GuestRecord,
+    IdentityReadinessResponse,
     InvalidationRequest,
     ObservationSnapshot,
     PurgeReceipt,
     ReferenceSubmission,
     VisualObservation,
 )
+from cue_api.guests.identity_evidence import IdentityEvidence, gather
+from cue_api.guests.identity_readiness import assess_identity_readiness
 from cue_api.guests.observation_store import ObservationStore, StaleEpochError
 from cue_api.guests.registry import ConsentError, GuestNotFoundError, GuestRegistry
 from cue_api.settings import Settings
@@ -48,6 +51,7 @@ def build_guest_router(
     registry: GuestRegistry,
     observations: ObservationStore,
     clock: Callable[[], int] = _default_clock,
+    evidence: Callable[[], IdentityEvidence] = gather,
 ) -> APIRouter:
     def require_operator(
         x_cue_bootstrap_secret: str | None = Header(default=None),
@@ -214,6 +218,32 @@ def build_guest_router(
             event_id=payload.event_id,
             now_ms=clock(),
             gallery_version=registry.gallery_version,
+        )
+
+    @router.get("/guests/readiness", response_model=IdentityReadinessResponse)
+    def read_identity_readiness(event_id: str = EVENT_ID_QUERY) -> IdentityReadinessResponse:
+        """What identity has earned the right to do, from the evidence on hand.
+
+        Read by D's panel for the disclosure and by C for `role_based`. It is
+        computed on every request rather than cached: a calibration can be dropped
+        in mid-event, and a stale "AUTO" would be the worst thing to cache.
+        """
+        current = evidence()
+        readiness = assess_identity_readiness(
+            calibration=current.calibration,
+            report=current.report,
+            mac_runtime_gate_passed=current.mac_runtime_gate_passed,
+            media_checks_passed=current.media_checks_passed,
+        )
+        return IdentityReadinessResponse(
+            event_id=event_id,
+            naming_policy=readiness.policy.value,
+            role_based=readiness.role_based,
+            unattended_naming_permitted=readiness.unattended_naming_permitted,
+            calibration_status=current.calibration.status,
+            disclosure=readiness.disclosure,
+            blocking_reasons=list(readiness.blocking_reasons),
+            attestations=current.attestations(),
         )
 
     @router.get("/guests/tallies")

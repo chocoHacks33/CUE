@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import FastAPI, Header, HTTPException, Path, Response, status
@@ -29,6 +30,7 @@ from cue_api.contracts import (
 from cue_api.control import ControlSessionStore, ControlStore
 from cue_api.control_socket import ControlHub, build_control_router, build_control_websocket
 from cue_api.guests import GuestRegistry, ObservationStore, build_guest_router
+from cue_api.guests.identity_evidence import IdentityEvidence, gather
 from cue_api.livekit_tokens import (
     LiveKitPublisherTokenIssuer,
     LiveKitReceiverTokenIssuer,
@@ -50,6 +52,7 @@ def create_app(
     receiver_token_issuer: ReceiverTokenIssuer | None = None,
     guest_registry: GuestRegistry | None = None,
     observation_store: ObservationStore | None = None,
+    identity_evidence: Callable[[], IdentityEvidence] | None = None,
     admission_store: AdmissionStore | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings()
@@ -381,7 +384,14 @@ def create_app(
             for binding in admissions.list_bindings(event_id)
         ]
 
-    app.include_router(build_guest_router(app_settings, registry, observations))
+    app.include_router(
+        build_guest_router(
+            app_settings,
+            registry,
+            observations,
+            evidence=identity_evidence or gather,
+        )
+    )
     app.include_router(
         build_control_router(
             control_store,

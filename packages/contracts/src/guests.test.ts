@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   IDENTITY_TTL_MS,
   parseGuestRecord,
+  parseIdentityReadiness,
   parseVisualObservation,
+  requiresOperatorConfirmation,
   supportsNamedTake,
   type VisualObservation,
 } from "./guests";
@@ -225,5 +227,104 @@ describe("guest record validation", () => {
     const draft = activeGuest();
     (draft.consent as Record<string, unknown>).purposes = ["MARKETING"];
     expect(() => parseGuestRecord(draft)).toThrow(/Unknown consent purpose/);
+  });
+});
+
+describe("identity readiness", () => {
+  const readiness = {
+    guestContractVersion: "0.1.0",
+    eventId: "hackmit-demo",
+    namingPolicy: "ROLE_BASED",
+    roleBased: true,
+    unattendedNamingPermitted: false,
+    calibrationStatus: "PROVISIONAL_DEFAULT",
+    disclosure:
+      "Cameras are chosen by role, not by face recognition. Nothing on screen is identified by face.",
+    blockingReasons: ["no identity report exists"],
+    attestations: {},
+  };
+
+  const mutate = (change: (draft: Record<string, unknown>) => void) => {
+    const draft = { ...readiness } as Record<string, unknown>;
+    change(draft);
+    return draft;
+  };
+
+  it("parses the role-based default the backend reports today", () => {
+    const parsed = parseIdentityReadiness(readiness);
+
+    expect(parsed.namingPolicy).toBe("ROLE_BASED");
+    expect(parsed.roleBased).toBe(true);
+    expect(parsed.unattendedNamingPermitted).toBe(false);
+    expect(parsed.blockingReasons).toHaveLength(1);
+  });
+
+  it("parses a fully evidenced NAMED_AUTO", () => {
+    const parsed = parseIdentityReadiness(
+      mutate((draft) => {
+        draft.namingPolicy = "NAMED_AUTO";
+        draft.roleBased = false;
+        draft.unattendedNamingPermitted = true;
+        draft.calibrationStatus = "MEASURED";
+        draft.blockingReasons = [];
+        draft.attestations = { macRuntimeGate: "D — docs/results/b-media-check.md" };
+      }),
+    );
+
+    expect(parsed.namingPolicy).toBe("NAMED_AUTO");
+    expect(parsed.attestations.macRuntimeGate).toContain("b-media-check.md");
+  });
+
+  it("refuses a readiness with no disclosure, which could not be shown", () => {
+    expect(() => parseIdentityReadiness(mutate((draft) => (draft.disclosure = "   ")))).toThrow(
+      /disclosure/,
+    );
+  });
+
+  it("refuses unattended naming outside NAMED_AUTO", () => {
+    expect(() =>
+      parseIdentityReadiness(mutate((draft) => (draft.unattendedNamingPermitted = true))),
+    ).toThrow(/cannot permit unattended naming/);
+  });
+
+  it("refuses NAMED_AUTO that does not permit unattended naming", () => {
+    expect(() =>
+      parseIdentityReadiness(
+        mutate((draft) => {
+          draft.namingPolicy = "NAMED_AUTO";
+          draft.roleBased = false;
+        }),
+      ),
+    ).toThrow(/must permit unattended naming/);
+  });
+
+  it("refuses ROLE_BASED that does not set roleBased", () => {
+    expect(() => parseIdentityReadiness(mutate((draft) => (draft.roleBased = false)))).toThrow(
+      /must set roleBased/,
+    );
+  });
+
+  it("rejects an unknown naming policy", () => {
+    expect(() =>
+      parseIdentityReadiness(mutate((draft) => (draft.namingPolicy = "PROBABLY_FINE"))),
+    ).toThrow(/Unknown naming policy/);
+  });
+
+  it("rejects an attestation that names nobody", () => {
+    expect(() =>
+      parseIdentityReadiness(mutate((draft) => (draft.attestations = { macRuntimeGate: "  " }))),
+    ).toThrow(/must name who attested/);
+  });
+
+  it("tells the UI when the operator has to confirm", () => {
+    const assist = parseIdentityReadiness(
+      mutate((draft) => {
+        draft.namingPolicy = "NAMED_ASSIST";
+        draft.roleBased = false;
+      }),
+    );
+
+    expect(requiresOperatorConfirmation(assist)).toBe(true);
+    expect(requiresOperatorConfirmation(parseIdentityReadiness(readiness))).toBe(false);
   });
 });
