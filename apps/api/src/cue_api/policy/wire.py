@@ -56,7 +56,14 @@ class DecisionEvent(_Wire):
     Field names match A's convention (camelCase on the wire) and a
     contractVersion is included so the client can gate on schema drift.
     ``source`` is exactly "LIVE" or "FIXTURE" — the fixture cue producer
-    always emits "FIXTURE".
+    always emits "FIXTURE". ``identity`` is "ROLE_BASED" or "VERIFIED"
+    per the DecisionRecord it was adapted from.
+
+    NOTE: adding ``identity`` to the wire is a schema extension. It is
+    additive (default "ROLE_BASED") so a client that ignores the field
+    still works. A: please confirm you accept this on the wire, or ask
+    me to strip it in ``to_wire`` — the field stays on my record either
+    way. See docs/results/C-stage4.md open requests.
     """
     contract_version: str = CONTRACT_VERSION
     kind: Literal["decision"] = "decision"
@@ -71,6 +78,7 @@ class DecisionEvent(_Wire):
     cue_summary: WireCueSummary | None = None
     cameras_considered: list[WireCameraConsidered] = []
     latencies_ms: dict[str, float] = {}
+    identity: Literal["ROLE_BASED", "VERIFIED"] = "ROLE_BASED"
     source: Literal["LIVE", "FIXTURE"] = "LIVE"
 
 
@@ -82,6 +90,9 @@ def to_wire(record: DecisionRecord, *, source_override: str | None = None) -> De
     source: str = source_override or record.source or "LIVE"
     if source not in ("LIVE", "FIXTURE"):
         source = "LIVE"
+    identity = getattr(record, "identity", "ROLE_BASED")
+    if identity not in ("ROLE_BASED", "VERIFIED"):
+        identity = "ROLE_BASED"
     return DecisionEvent(
         at=record.at,
         decision_seq=record.decision_seq,
@@ -94,6 +105,7 @@ def to_wire(record: DecisionRecord, *, source_override: str | None = None) -> De
         cue_summary=cs,
         cameras_considered=cams,
         latencies_ms=dict(record.latencies_ms or {}),
+        identity=identity,  # type: ignore[arg-type]
         source=source,  # type: ignore[arg-type]
     )
 

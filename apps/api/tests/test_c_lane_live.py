@@ -184,7 +184,9 @@ def test_final_deepgram_message_produces_take_and_stamps_latency():
     assert ev.camera_id == "CAM-GUEST"
     assert "final_ms" in ev.latencies_ms
     assert "cue_decide_ms" in ev.latencies_ms
-    assert ev.latencies_ms.get("_identity") == 1.0
+    assert ev.identity == "ROLE_BASED"
+    # The sentinel is gone; make sure no test-only leftover key crept in.
+    assert "_identity" not in ev.latencies_ms
 
 
 def test_bad_pcm_continuity_is_dropped_without_wedging_loop():

@@ -63,6 +63,12 @@
       "enum": ["LIVE", "FIXTURE"],
       "default": "LIVE",
       "description": "Provenance marker. Fixture replays (scripts/fixture_cues.py) always emit 'FIXTURE' so downstream readers cannot confuse a scripted line with a live one."
+    },
+    "identity": {
+      "type": "string",
+      "enum": ["ROLE_BASED", "VERIFIED"],
+      "default": "ROLE_BASED",
+      "description": "How a named target was resolved to a camera. ROLE_BASED = role_map lookup only (no face verification); VERIFIED = B's visual observation confirmed the guest. The compositor MUST NOT render 'identified as' text when identity=ROLE_BASED."
     }
   },
   "examples": [
@@ -92,7 +98,8 @@
         {"camera_id": "CAM-WIDE",  "role": "wide",  "healthy": true, "guest_ready": true, "evidence_age_s": 999.0, "picked": false}
       ],
       "latencies_ms": {"asr": 320, "cue": 850, "decide": 1, "total": 1171},
-      "source": "FIXTURE"
+      "source": "FIXTURE",
+      "identity": "ROLE_BASED"
     },
     {
       "_fixture": "named_take_role_based",
