@@ -136,3 +136,47 @@ def test_expired_policy_render_does_not_block_the_next_decision() -> None:
     metrics = store.latency_metrics("demo")
     assert metrics.rejected_count == 1
     assert metrics.outstanding_count == 1
+
+
+def test_trusted_reconciliation_invalidates_an_unrendered_command() -> None:
+    store = ControlStore()
+    pending = store.manual_take(
+        "demo",
+        camera_id=CameraId.GUEST,
+        stream_epoch=2,
+        expected_revision=0,
+        idempotency_key="take-before-reconnect",
+        now_ms=1_000,
+    ).render_command
+    assert pending is not None
+    revision_before_reconcile = store.snapshot("demo").mode_revision
+
+    reconciled = store.reconcile(
+        "demo",
+        RenderReconcileRequest(
+            control_generation=pending.control_generation,
+            actual_camera_id=CameraId.HOST,
+            actual_stream_epoch=1,
+            reported_at_ms=1_100,
+        ),
+    )
+
+    assert reconciled.pending_decision_id is None
+    assert reconciled.live_camera_id is CameraId.HOST
+    assert reconciled.mode_revision == revision_before_reconcile + 1
+    assert store.latency_metrics("demo").rejected_count == 1
+    with pytest.raises(ControlError) as late:
+        store.acknowledge(
+            "demo",
+            RenderAckRequest(
+                decision_id=pending.decision_id,
+                control_generation=pending.control_generation,
+                decision_sequence=pending.decision_sequence,
+                status=RenderStatus.APPLIED,
+                actual_camera_id=CameraId.GUEST,
+                actual_stream_epoch=2,
+                applied_at_ms=1_120,
+            ),
+            now_ms=1_120,
+        )
+    assert late.value.code == "UNKNOWN_DECISION"

@@ -94,6 +94,19 @@ class ControlStore:
     def latency_metrics(self, event_id: str) -> ControlLatencyMetrics:
         return self._metrics.snapshot(event_id)
 
+    def end_event(self, event_id: str) -> ControlSnapshot:
+        """Fence future commands and invalidate any render awaiting an ACK."""
+        with self._lock:
+            event = self._event(event_id)
+            if event.mode is ControlMode.ENDED:
+                return self._snapshot(event)
+            if event.pending is not None:
+                self._metrics.acknowledged(event.pending.decision_id, RenderStatus.REJECTED)
+            event.pending = None
+            event.mode = ControlMode.ENDED
+            event.mode_revision += 1
+            return self._snapshot(event)
+
     def _expire_pending(self, event: _EventControl, now_ms: int) -> None:
         command = event.pending
         if command is None or now_ms <= command.expires_at_ms:
@@ -382,10 +395,12 @@ class ControlStore:
             if event.mode is ControlMode.ENDED:
                 raise ControlError("EVENT_ENDED", "an ended event cannot be reconciled")
             if event.pending is not None:
-                raise ControlError(
-                    "PENDING_DECISION",
-                    "resolve or invalidate the pending render before reconciliation",
+                self._metrics.acknowledged(
+                    event.pending.decision_id,
+                    RenderStatus.REJECTED,
                 )
+                event.pending = None
+                event.mode_revision += 1
             event.live_camera_id = report.actual_camera_id
             event.live_stream_epoch = report.actual_stream_epoch
             return self._snapshot(event)
@@ -429,3 +444,14 @@ class ControlSessionStore:
                 self._sessions.pop(self._digest(token), None)
                 raise ControlError("SESSION_EXPIRED", "control session expired")
             return session
+
+    def revoke_event(self, event_id: str) -> int:
+        with self._lock:
+            digests = [
+                digest
+                for digest, session in self._sessions.items()
+                if session.event_id == event_id
+            ]
+            for digest in digests:
+                del self._sessions[digest]
+            return len(digests)

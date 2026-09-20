@@ -188,6 +188,8 @@ export function PairingPanel({ apiBaseUrl, eventId, producerSecret, onLog }: Pai
                   <dd>{binding.deviceSessionId}</dd>
                   <dt>Stream epoch</dt>
                   <dd>{binding.streamEpoch}</dd>
+                  <dt>Binding revision</dt>
+                  <dd>{binding.bindingRevision}</dd>
                   <dt>Video SID</dt>
                   <dd>{binding.currentVideoTrackSid ?? "not yet published"}</dd>
                 </dl>

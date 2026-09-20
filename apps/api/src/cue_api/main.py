@@ -10,6 +10,7 @@ from cue_api.admission import AdmissionCode, AdmissionError, AdmissionStore
 from cue_api.contracts import (
     CAMERA_CONTRACTS,
     CameraBindingResponse,
+    EventEndReceipt,
     HealthResponse,
     PairingClaimRequest,
     PairingClaimResponse,
@@ -25,10 +26,13 @@ from cue_api.contracts import (
     ReceiverTokenRequest,
     ReceiverTokenResponse,
     TopologyResponse,
+    TransportMutationResponse,
+    VideoTrackMutationRequest,
 )
 from cue_api.control import ControlSessionStore, ControlStore
 from cue_api.control_socket import ControlHub, build_control_router, build_control_websocket
 from cue_api.guests import GuestRegistry, ObservationStore, build_guest_router
+from cue_api.lifecycle import EventLifecycleCoordinator
 from cue_api.livekit_tokens import (
     LiveKitPublisherTokenIssuer,
     LiveKitReceiverTokenIssuer,
@@ -37,6 +41,7 @@ from cue_api.livekit_tokens import (
 )
 from cue_api.readiness import ReadinessStore
 from cue_api.settings import Settings
+from cue_api.transport import TransportCoordinator
 
 EventIdPath = Annotated[
     str,
@@ -65,6 +70,15 @@ def create_app(
     control_sessions = ControlSessionStore()
     control_hub = ControlHub()
     readiness_store = ReadinessStore()
+    transport = TransportCoordinator(admissions, observations)
+    lifecycle = EventLifecycleCoordinator(
+        admissions=admissions,
+        control=control_store,
+        sessions=control_sessions,
+        readiness=readiness_store,
+        guests=registry,
+        observations=observations,
+    )
 
     app = FastAPI(
         title="CUE API",
@@ -126,8 +140,15 @@ def create_app(
             AdmissionCode.CONFLICT: status.HTTP_409_CONFLICT,
             AdmissionCode.NOT_APPROVED: status.HTTP_409_CONFLICT,
             AdmissionCode.ALREADY_USED: status.HTTP_409_CONFLICT,
+            AdmissionCode.EVENT_ENDED: status.HTTP_410_GONE,
         }
         raise HTTPException(status_code=status_by_code[error.code], detail=str(error)) from error
+
+    def require_active_event(event_id: str) -> None:
+        try:
+            lifecycle.require_active(event_id)
+        except AdmissionError as error:
+            raise_admission(error)
 
     @app.get("/health/live", response_model=HealthResponse)
     def health_live() -> HealthResponse:
@@ -157,6 +178,7 @@ def create_app(
         x_cue_bootstrap_secret: str | None = Header(default=None),
     ) -> PublisherTokenResponse:
         require_stage0_admission(x_cue_bootstrap_secret)
+        require_active_event(payload.event_id)
 
         try:
             issued = issuer.issue(payload.event_id, payload.camera_id, payload.display_name)
@@ -186,6 +208,7 @@ def create_app(
     ) -> ReceiverTokenResponse:
         """Subscribe-only credential for D's Mac receiver. It can never publish."""
         require_stage0_admission(x_cue_bootstrap_secret)
+        require_active_event(payload.event_id)
 
         try:
             issued = receiver_issuer.issue(
@@ -381,13 +404,94 @@ def create_app(
             for binding in admissions.list_bindings(event_id)
         ]
 
-    app.include_router(build_guest_router(app_settings, registry, observations))
+    @app.post(
+        "/api/v1/events/{event_id}/transport/video-attached",
+        response_model=TransportMutationResponse,
+    )
+    def video_attached(
+        event_id: EventIdPath,
+        payload: VideoTrackMutationRequest,
+        x_cue_producer_secret: str | None = Header(default=None),
+    ) -> TransportMutationResponse:
+        require_producer(x_cue_producer_secret)
+        require_active_event(event_id)
+        try:
+            mutation = transport.attach_video(
+                event_id=event_id,
+                camera_id=payload.camera_id,
+                participant_identity=payload.participant_identity,
+                track_sid=payload.track_sid,
+            )
+        except AdmissionError as error:
+            raise_admission(error)
+        return TransportMutationResponse(
+            binding=CameraBindingResponse.model_validate(mutation.binding.__dict__),
+            outcome=mutation.outcome,
+            epoch_advanced=mutation.epoch_advanced,
+            observation_dropped=mutation.observation_dropped,
+        )
+
+    @app.post(
+        "/api/v1/events/{event_id}/transport/video-detached",
+        response_model=TransportMutationResponse,
+    )
+    def video_detached(
+        event_id: EventIdPath,
+        payload: VideoTrackMutationRequest,
+        x_cue_producer_secret: str | None = Header(default=None),
+    ) -> TransportMutationResponse:
+        require_producer(x_cue_producer_secret)
+        require_active_event(event_id)
+        try:
+            mutation = transport.detach_video(
+                event_id=event_id,
+                camera_id=payload.camera_id,
+                participant_identity=payload.participant_identity,
+                track_sid=payload.track_sid,
+            )
+        except AdmissionError as error:
+            raise_admission(error)
+        return TransportMutationResponse(
+            binding=CameraBindingResponse.model_validate(mutation.binding.__dict__),
+            outcome=mutation.outcome,
+            epoch_advanced=mutation.epoch_advanced,
+            observation_dropped=mutation.observation_dropped,
+        )
+
+    @app.post("/api/v1/events/{event_id}/end", response_model=EventEndReceipt)
+    async def end_event(
+        event_id: EventIdPath,
+        x_cue_producer_secret: str | None = Header(default=None),
+    ) -> EventEndReceipt:
+        require_producer(x_cue_producer_secret)
+        receipt = lifecycle.end_event(event_id)
+        await control_hub.broadcast(
+            event_id,
+            {
+                "type": "control.state",
+                "state": control_store.snapshot(event_id).model_dump(
+                    mode="json", by_alias=True
+                ),
+            },
+        )
+        await control_hub.close_event(event_id)
+        return receipt
+
+    app.include_router(
+        build_guest_router(
+            app_settings,
+            registry,
+            observations,
+            ensure_event_active=require_active_event,
+        )
+    )
     app.include_router(
         build_control_router(
             control_store,
             control_sessions,
             control_hub,
             readiness_store,
+            require_active_event,
             require_producer,
         )
     )
@@ -398,6 +502,8 @@ def create_app(
     app.state.control_store = control_store
     app.state.control_sessions = control_sessions
     app.state.readiness_store = readiness_store
+    app.state.transport_coordinator = transport
+    app.state.lifecycle = lifecycle
 
     return app
 

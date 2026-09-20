@@ -61,6 +61,7 @@ describe("pairing view helpers", () => {
       displayName: "Person A",
       currentVideoTrackSid: null,
       streamEpoch: 1,
+      bindingRevision: 0,
     };
     expect(bindingForCamera([binding], "CAM-HOST")).toBe(binding);
     expect(bindingForCamera([binding], "CAM-GUEST")).toBeNull();
