@@ -1,4 +1,8 @@
-# Person A Stage 7 preliminary handoff
+# Person A Stage 7 preliminary handoff (superseded)
+
+The integrated A handoff is in
+[`stage-7-a-handoff.md`](stage-7-a-handoff.md). This file remains as the
+dependency-free preparation record.
 
 Branch: `codex/person-a-stage-7-prep`
 
