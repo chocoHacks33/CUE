@@ -356,6 +356,35 @@ def _load_capture(cv2, decoded_frame, capture_type, image_path: str, guest_id: s
     return capture_type(label=image_path, frame=frame, guest_id=guest_id)
 
 
+def _end_event_command(args: argparse.Namespace) -> int:
+    """Purge an event's consented data, then read it back and prove it is gone.
+
+    Exits non-zero if anything survived, because a cleanup nobody verified is
+    indistinguishable from one that did not happen.
+    """
+    from cue_api.guests.cleanup import cleanup_lines, run_cleanup
+
+    client = GuestBackendClient(args.api, args.secret)
+    try:
+        record = run_cleanup(client, args.event)
+    except BackendError as error:
+        print(f"error: {error}", file=sys.stderr)
+        return 1
+
+    for line in cleanup_lines(record):
+        print(line)
+
+    if args.out:
+        document = json.dumps(record.to_document(), indent=2) + chr(10)
+        Path(args.out).write_text(document, "utf-8")
+        print(f"written to:   {args.out}")
+
+    if not record.clean:
+        print("Consented data survived the purge.", file=sys.stderr)
+        return 1
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cue-guests", description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -425,6 +454,13 @@ def build_parser() -> argparse.ArgumentParser:
     )
     trials.add_argument("--out", default="trials.json")
     trials.set_defaults(handler=_trials_command)
+
+    end_event = subparsers.add_parser(
+        "end-event", help="purge an event's consented data and verify nothing remains"
+    )
+    add_backend_arguments(end_event)
+    end_event.add_argument("--out", help="write the cleanup record here for the results doc")
+    end_event.set_defaults(handler=_end_event_command)
 
     return parser
 
