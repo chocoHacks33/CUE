@@ -7,6 +7,7 @@ import {
   isDecodedFrameDescriptor,
   mayPublishMicrophone,
   parsePublisherMetadata,
+  STAGE4_PROBE_AREAS,
 } from "./index";
 
 describe("camera topology", () => {
@@ -23,6 +24,20 @@ describe("camera topology", () => {
   it("does not overload role with source identity", () => {
     expect(CAMERA_CONTRACTS["CAM-HOST"].cameraId).toBe("CAM-HOST");
     expect(CAMERA_CONTRACTS["CAM-HOST"].role).toBe("HOST");
+  });
+});
+
+describe("Stage 4 evidence contract", () => {
+  it("keeps every Person A probe area stable across the API and operator UI", () => {
+    expect(STAGE4_PROBE_AREAS).toEqual([
+      "ROUTING_RECONNECT",
+      "SOURCE_LOSS",
+      "BACKEND_FAILURE",
+      "SPEECH_PROVIDER_FAILURE",
+      "SEMANTIC_PROVIDER_FAILURE",
+      "EVENT_ACCESS",
+      "OBSERVER_CONTROL",
+    ]);
   });
 });
 
