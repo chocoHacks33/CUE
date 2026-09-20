@@ -56,6 +56,14 @@ So YuNet and SFace have now run on this Mac, in the API venv (opencv-python 4.14
 | `apps/api` ruff | clean |
 | web tests, typecheck, build | PASS (via the preflight) |
 
+## 3a. GitHub Actions stopped starting jobs at about 01:50 Boston
+
+Every workflow run on every branch pushed after that time, including A's and B's Stage 6 branches and this one, fails in a few seconds with zero steps. The job annotation is:
+
+> The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings.
+
+The repository is private and owned by a user account; private-repo minutes count against the account's allowance, with macOS runners billed at ten times the rate and Windows at twice. The workflow runs two macOS and two Windows jobs on every push and pull request, and there were dozens of pushes today. The frozen trunk commit `296e112` was checked before the cut-off and is green. Only the account owner can clear this: raise the spending limit or fix the payment method under Billing, make the repository public (public repositories do not consume the allowance; the plan already expects a public code link at submission, with no secrets or recordings in it), or drop the macOS jobs from the matrix. Until then a red check on a new branch means "not run", not "failed". Tonight's offline preflight on this Mac ran the same suites, lint, type-check and build on the frozen commit.
+
 ## 4. State of D's lane going into the night
 
 Nothing changed. Every physical row in `d-stage4-check.md` and `d-stage5-freeze.md` is NOT RUN; no live feed has reached this Mac at any stage. The tooling for every row exists and its offline tests pass.

@@ -14,6 +14,10 @@ Stage 6 in the v3 plan is the overnight window: a short handoff and offline regr
 
 `OPENAI_API_KEY`, `DEEPGRAM_API_KEY` and `CUE_MODEL` are empty in the root `.env` on the Mac. Nothing overnight can fix that; only the person holding the keys can. It should be the first action after 08:00, before the tunnel and before the publishers connect, because C's live lane and A's provider smoke both stop without them.
 
+## CI is down for the repository, not for the code
+
+Since about 01:50 Boston, GitHub Actions has refused to start jobs on this private repository: the account's spending limit is exhausted or a payment failed (annotation quoted in the check record). Every branch pushed since then is red with zero steps, including A's and B's. The frozen trunk commit is green and was re-checked offline on this Mac tonight. Clearing it is the account owner's call: raise the limit, fix the payment method, make the repository public, or drop the macOS jobs. Nobody should read a red check on a Stage 6 branch as a failing test.
+
 ## What D will not do overnight
 
 - No dependency upgrades, no package installs, no changes to the Mac's Python or Node.
