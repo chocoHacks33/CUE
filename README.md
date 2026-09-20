@@ -60,6 +60,7 @@ Person B's work is one document per stage:
 - [docs/b-stage-5-prep.md](docs/b-stage-5-prep.md) — verified consented-data cleanup, limitations and licences
 - [docs/b-stage-5.md](docs/b-stage-5.md) — the freeze made enforceable, and the operator run sheet
 - [docs/b-stage-6-prep.md](docs/b-stage-6-prep.md) — the overnight handoff, and `python scripts/b_offline_regression.py`
+- [docs/b-stage-6.md](docs/b-stage-6.md) — the overnight check, run and filed; no code, on purpose
 
 B's submission statement, written for a sceptical reader: [docs/b-limitations-and-licences.md](docs/b-limitations-and-licences.md). On the night, use [docs/b-run-sheet.md](docs/b-run-sheet.md).
 
