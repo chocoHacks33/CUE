@@ -96,7 +96,7 @@ Maps one to one onto A's verification list.
 | Stop and reconnect keeps `CAM-HOST` stable | A clicks Stop, then Publish again. Same tile rebinds; `Video SID` changes; `Earlier SIDs` lists the old one; camera ID never moves |
 | No secrets in Git or browser logs | `.env` ignored; the log panel prints identities and SIDs only |
 
-Then run the **Recording test** with `CAM-HOST + master audio`: Start, wait 30 to 60 s while A speaks a marker and waves, Stop, play inline, Download, and play the file in QuickTime or VLC. Record the real container (expected `video/webm;codecs=vp8,opus`), duration and outcome in the results file.
+Then run the **Recording test** with `CAM-HOST + master audio`: Start, wait 30 to 60 s while A speaks a marker and waves, Stop, play inline, Download, and play the file in VLC or Chrome (WebM does not open in QuickTime). Record the real container (expected `video/webm;codecs=vp8,opus`), duration and outcome in the results file.
 
 ## Stage 3: control link, evidence and modes
 
@@ -105,13 +105,38 @@ Then run the **Recording test** with `CAM-HOST + master audio`: Start, wait 30 t
 - Each tile shows a "Who" line from B's observations: a name only for a confirmed consenting guest, with age and whether a named take is allowed. It reads "evidence off" until connected, and "unavailable" if B's routes are down.
 - A switch that draws no frame within 1 s is acknowledged FAILED and reverted; a red banner says so.
 
+## Stage 5: freeze, capture, backup
+
+Freeze means: the commit A tags is the commit running here, and nothing on this Mac changes after that (no dependency upgrades, no `git pull` past the tag).
+
+1. Confirm the running commit: `git rev-parse HEAD` in the terminal that started uvicorn, and the same in the web build's terminal.
+2. Capture the configuration: `apps/api/.venv/bin/python scripts/mac_config_snapshot.py` and paste it into `docs/results/d-stage5-freeze.md` (names only, no secrets).
+3. After the official session: `Stop recording`, `Download recording`, then
+   `apps/api/.venv/bin/python scripts/verify_recording.py <file.webm> --min-seconds 120 --backup <private dir> --markdown`.
+   Paste the table. A `FAIL` row means the file is not the deliverable; keep it, note why, and rerun the session if there is time.
+4. Play the file yourself, start to end, in VLC or Chrome (`file://`). WebM does not open in QuickTime. Listen for audio restarts at cuts: there must be none.
+5. `Save programme still` for the shots listed in the freeze file. Keep stills with the recording, out of Git.
+6. Only then fill D's fields in A's `docs/results/stage5-release-approval.json`.
+
+Venv note: the API venv has `livekit-api` but not `livekit`; the worker (`worker_ingest`) needs the repo-root `.venv`, which has `livekit` 1.1.19. Do not "fix" this on the night by installing packages; start the worker from the venv that already works.
+
+## Sunday morning: re-establish (plan Stage 7, D)
+
+Framing is invalid after the laptops moved. Before claiming anything:
+
+- Three feeds decoding with visual markers, mapping verified physically.
+- A's audio attached and audible on headphones; `refreshAudioSource` log shows one master track.
+- One clap/flash per angle; `scripts/av_skew.py` on a short recording.
+- A 20-minute soak if time allows, else a 5-minute one, exported; note which.
+- Play the recording outside the app before the pitch.
+
 ## Stage 4: measurements and failure drills
 
 All of this needs the three Windows webcams, A's mic and the worker running. Export files and recordings are private; fill `docs/results/d-stage4-check.md` from them.
 
 - **Cuts.** Press 1/2/3 at least 30 times over a few minutes with all three renderable. The "Manual cuts" row shows press-to-picture p50/p95 and the gate. Backend-routed cuts (control link up) measure from the key press, not from the returned command.
 - **Failovers.** Ten times: cover the on-air webcam (or close its lid, or kill its publisher tab). Watch the tally go to the safety shot; the "Failovers" row shows loss-detected-to-picture and from-last-frame. Vary which camera fails and how.
-- **Soak.** Start the programme recording, then `Start 20-minute soak`. Leave the tab visible (a hidden tab throttles the draw loop and fails the run). After 20 minutes: `Stop soak`, `Export Stage 4 measurements`, `Stop recording`, `Download recording`, play the file in QuickTime or VLC.
+- **Soak.** Start the programme recording, then `Start 20-minute soak`. Leave the tab visible (a hidden tab throttles the draw loop and fails the run). After 20 minutes: `Stop soak`, `Export Stage 4 measurements`, `Stop recording`, `Download recording`, play the file in VLC or Chrome (WebM does not open in QuickTime).
 - **Clap tests.** Three claps in front of a light at the start and three after 15 minutes, per angle. Then `apps/api/.venv/bin/python scripts/av_skew.py <recording> --events 6`.
 - **HOLD drill.** With AUTO on and C's lane cutting, press H. The compositor holds at once; a cut that was already in flight is rejected with `STALE_MODE_REVISION` in the timeline.
 - **Link drill.** Stop uvicorn: the strip says DEGRADED, keys still work locally. Start it again: the link reconnects, and if the backend still says AUTO the compositor stays in ASSIST, shows a banner, and asks the backend to step down. Press `Enable AUTO` to re-arm.
