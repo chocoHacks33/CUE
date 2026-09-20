@@ -10,6 +10,7 @@ from cue_api.release_preflight import (
     Check,
     check_approval,
     check_environment,
+    check_web_artifact,
     inspect_git,
     inspect_runtime,
     make_manifest,
@@ -50,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
         checks.append(Check("validation-suite", INCOMPLETE, "rerun with --run-suite"))
     if args.startup_smoke:
         checks.append(run_api_startup_smoke(root))
+        checks.append(check_web_artifact(root))
     else:
         checks.append(Check("api-clean-start", INCOMPLETE, "rerun with --startup-smoke"))
     if args.provider_smoke:
@@ -57,7 +59,22 @@ def main(argv: list[str] | None = None) -> int:
     else:
         checks.append(Check("provider-smoke", INCOMPLETE, "rerun with --provider-smoke"))
 
-    manifest = make_manifest(commit, checks)
+    approval_value: dict[str, object] = {}
+    if approval.is_file():
+        try:
+            loaded = json.loads(approval.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                approval_value = loaded
+        except (OSError, json.JSONDecodeError):
+            pass
+    release_tag = approval_value.get("releaseTag")
+    release_mode = approval_value.get("releaseMode")
+    manifest = make_manifest(
+        commit,
+        checks,
+        release_tag=release_tag if isinstance(release_tag, str) else None,
+        release_mode=release_mode if isinstance(release_mode, str) else None,
+    )
     write_manifest(output, manifest)
     print(json.dumps(manifest, indent=2))
     if manifest["status"] == FAIL:

@@ -2,6 +2,8 @@
   "schemaVersion": 1,
   "testedCommit": "REPLACE_WITH_FULL_GIT_COMMIT",
   "releaseTag": "cue-hackmit-2026-demo",
+  "releaseMode": "ROLE_BASED_ASSIST",
+  "scopeDecisionEvidence": "docs/results/stage-4-integration-check.md",
   "stage4Gates": {
     "A": {
       "status": "INCOMPLETE",
@@ -30,7 +32,10 @@
     "saved": false,
     "reopenedAndVerified": false,
     "allMembersVerified": false,
-    "trackVerified": false
+    "trackVerified": false,
+    "projectUrl": "REPLACE_WITH_HTTPS_PROJECT_URL",
+    "savedAtUtc": "REPLACE_WITH_ISO_8601_TIME",
+    "evidence": "REPLACE_WITH_PRIVATE_SCREENSHOT_OR_EXPORT_REFERENCE"
   },
   "ownerSignoffs": {
     "A": false,

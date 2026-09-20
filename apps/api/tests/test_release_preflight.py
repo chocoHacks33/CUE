@@ -10,6 +10,7 @@ from cue_api.release_preflight import (
     Check,
     check_approval,
     check_environment,
+    check_web_artifact,
     make_manifest,
     parse_env_file,
     run_api_startup_smoke,
@@ -21,6 +22,8 @@ def valid_approval(commit: str) -> dict[str, object]:
         "schemaVersion": 1,
         "testedCommit": commit,
         "releaseTag": "cue-hackmit-2026-demo",
+        "releaseMode": "ROLE_BASED_ASSIST",
+        "scopeDecisionEvidence": "docs/results/stage-4-integration-check.md",
         "stage4Gates": {
             owner: {"status": "PASS", "evidence": f"private/{owner}-stage4.json"}
             for owner in "ABCD"
@@ -36,6 +39,9 @@ def valid_approval(commit: str) -> dict[str, object]:
             "reopenedAndVerified": True,
             "allMembersVerified": True,
             "trackVerified": True,
+            "projectUrl": "https://example.invalid/cue",
+            "savedAtUtc": "2026-09-20T02:00:00Z",
+            "evidence": "private/submission-reopened.png",
         },
         "ownerSignoffs": {owner: True for owner in "ABCD"},
         "limitationsReviewed": True,
@@ -62,8 +68,8 @@ def test_environment_check_never_returns_secret_values(tmp_path: Path) -> None:
         "LIVEKIT_API_KEY": "lk-key",
         "LIVEKIT_API_SECRET": "lk-secret",
         "CUE_MODEL": "configured-model",
-        "CUE_BOOTSTRAP_SECRET": "bootstrap-secret",
-        "CUE_PRODUCER_SECRET": "producer-secret",
+        "CUE_BOOTSTRAP_SECRET": "bootstrap-secret-long-enough",
+        "CUE_PRODUCER_SECRET": "producer-secret-is-also-long",
         "VITE_API_BASE_URL": "https://cue.invalid",
         "CUE_PROVIDER": "openai",
     }
@@ -126,6 +132,20 @@ def test_manifest_is_fail_closed() -> None:
     assert incomplete["releaseReady"] is False
     assert failed["status"] == FAIL
     assert passed["releaseReady"] is True
+
+
+def test_web_artifact_requires_every_referenced_asset(tmp_path: Path) -> None:
+    dist = tmp_path / "apps/web/dist"
+    assets = dist / "assets"
+    assets.mkdir(parents=True)
+    (dist / "index.html").write_text(
+        '<script src="/assets/app.js"></script><link href="/assets/app.css">',
+        encoding="utf-8",
+    )
+    (assets / "app.js").write_text("", encoding="utf-8")
+    assert check_web_artifact(tmp_path).status == FAIL
+    (assets / "app.css").write_text("", encoding="utf-8")
+    assert check_web_artifact(tmp_path).status == PASS
 
 
 def test_fresh_api_process_reaches_readiness(monkeypatch, tmp_path: Path) -> None:

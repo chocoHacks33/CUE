@@ -8,6 +8,7 @@ recordings to Git.
 
 - Commit: `FILL_IN_FULL_SHA`
 - Release tag after preflight PASS: `cue-hackmit-2026-demo`
+- Release mode: `ROLE_BASED_ASSIST` unless new evidence changes the scope decision
 - D's tested Mac and OS: `FILL_IN`
 - Node/Python versions: `FILL_IN`
 - Public HTTPS endpoint: `FILL_IN`
@@ -57,3 +58,22 @@ recordings to Git.
 - Claims match measured Stage 4 evidence and disclosed fallback mode.
 - Saved project reopened and every field persisted.
 - Demo video/official recording plays from the submitted link.
+
+## Release finalization
+
+After the submission has been saved, reopened and recorded in the private
+approval file, rerun the preflight on the exact pushed commit. First validate
+without mutation:
+
+```bash
+cue-release-finalize
+```
+
+Only when that succeeds and the team has reviewed the manifest:
+
+```bash
+cue-release-finalize --create-tag --push
+```
+
+Record the resulting tag URL in the submission. Never move or recreate a
+published release tag; fix forward with a new candidate and a new tag.

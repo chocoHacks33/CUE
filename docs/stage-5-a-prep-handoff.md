@@ -38,8 +38,13 @@ passed and it does not create a release tag.
 
 5. Read `artifacts/stage5-release-manifest.json`. Any FAIL or INCOMPLETE means
    no release tag and no AUTO claim.
-6. Only after PASS, manually create an annotated tag on the manifest's exact
-   commit and push that tag. Reopen the saved submission and verify persistence.
+6. Only after PASS, validate once without mutation, then explicitly create and
+   push the annotated tag on the manifest's exact commit:
+
+   ```bash
+   cue-release-finalize
+   cue-release-finalize --create-tag --push
+   ```
 
 ## What still requires the integrated system
 

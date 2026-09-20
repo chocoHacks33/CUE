@@ -24,6 +24,7 @@ PASS = "PASS"
 FAIL = "FAIL"
 INCOMPLETE = "INCOMPLETE"
 OWNER_NAMES = ("A", "B", "C", "D")
+RELEASE_MODES = ("ROLE_BASED_ASSIST", "NAMED_ASSIST", "NAMED_AUTO")
 REQUIRED_ENV = (
     "OPENAI_API_KEY",
     "DEEPGRAM_API_KEY",
@@ -95,6 +96,15 @@ def check_environment(path: Path) -> Check:
     producer = values.get("CUE_PRODUCER_SECRET", "")
     if bootstrap and producer and bootstrap == producer:
         problems.append("bootstrap and producer secrets must differ")
+    short_admission = [
+        name
+        for name in ("CUE_BOOTSTRAP_SECRET", "CUE_PRODUCER_SECRET")
+        if values.get(name) and len(values[name]) < 24
+    ]
+    if short_admission:
+        problems.append(
+            "admission secret shorter than 24 characters: " + ", ".join(short_admission)
+        )
     if problems:
         return Check("environment", FAIL, "; ".join(problems))
     return Check("environment", PASS, "required variables are populated; values were not logged")
@@ -122,6 +132,10 @@ def check_approval(path: Path, expected_commit: str) -> Check:
     tag = value.get("releaseTag")
     if not isinstance(tag, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{2,63}", tag):
         problems.append("releaseTag is missing or invalid")
+    if value.get("releaseMode") not in RELEASE_MODES:
+        problems.append("releaseMode is missing or invalid")
+    if not _meaningful_text(value.get("scopeDecisionEvidence")):
+        problems.append("scopeDecisionEvidence is missing")
 
     gates = value.get("stage4Gates")
     if not isinstance(gates, dict):
@@ -146,6 +160,15 @@ def check_approval(path: Path, expected_commit: str) -> Check:
         ("saved", "reopenedAndVerified", "allMembersVerified", "trackVerified"),
         problems,
     )
+    submission = value.get("submission")
+    if isinstance(submission, dict):
+        project_url = submission.get("projectUrl")
+        if not isinstance(project_url, str) or not project_url.startswith("https://"):
+            problems.append("submission.projectUrl must be an https URL")
+        if not _meaningful_text(submission.get("savedAtUtc")):
+            problems.append("submission.savedAtUtc is missing")
+        if not _meaningful_text(submission.get("evidence")):
+            problems.append("submission.evidence is missing")
     _require_true_fields(value.get("ownerSignoffs"), "ownerSignoffs", OWNER_NAMES, problems)
     if value.get("limitationsReviewed") is not True:
         problems.append("limitationsReviewed is not true")
@@ -348,9 +371,36 @@ def run_api_startup_smoke(repo_root: Path, timeout_s: float = 15.0) -> Check:
                 with urllib.request.urlopen(
                     f"http://127.0.0.1:{port}/health/ready", timeout=1
                 ) as response:
-                    if response.status == 200:
-                        return Check("api-clean-start", PASS, "fresh process reached ready")
-            except (urllib.error.URLError, TimeoutError):
+                    ready = json.load(response)
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{port}/api/v1/topology", timeout=1
+                ) as response:
+                    topology = json.load(response)
+                with urllib.request.urlopen(
+                    f"http://127.0.0.1:{port}/openapi.json", timeout=1
+                ) as response:
+                    openapi = json.load(response)
+                expected_routes = {
+                    "/api/v1/events/{event_id}/stage4/report",
+                    "/api/v1/guests/readiness",
+                }
+                route_set = set(openapi.get("paths", {}))
+                if (
+                    ready.get("livekitConfigured") is True
+                    and len(topology.get("cameras", [])) == 3
+                    and expected_routes <= route_set
+                ):
+                    return Check(
+                        "api-clean-start",
+                        PASS,
+                        "fresh integrated process reached ready with three cameras",
+                    )
+                return Check(
+                    "api-clean-start",
+                    FAIL,
+                    "API started but integrated topology or Stage 4 routes are missing",
+                )
+            except (urllib.error.URLError, TimeoutError, ValueError):
                 time.sleep(0.2)
         return Check("api-clean-start", FAIL, "API did not become ready before timeout")
     finally:
@@ -362,7 +412,27 @@ def run_api_startup_smoke(repo_root: Path, timeout_s: float = 15.0) -> Check:
             process.wait(timeout=5)
 
 
-def make_manifest(commit: str, checks: list[Check]) -> dict[str, Any]:
+def check_web_artifact(repo_root: Path) -> Check:
+    index = repo_root / "apps/web/dist/index.html"
+    if not index.is_file():
+        return Check("web-artifact", INCOMPLETE, "production build is missing")
+    content = index.read_text(encoding="utf-8")
+    references = re.findall(r'(?:src|href)="/?(assets/[^"]+)"', content)
+    missing = [path for path in references if not (repo_root / "apps/web/dist" / path).is_file()]
+    if not references:
+        return Check("web-artifact", FAIL, "built index has no asset references")
+    if missing:
+        return Check("web-artifact", FAIL, "missing built assets: " + ", ".join(missing))
+    return Check("web-artifact", PASS, f"built index references {len(references)} present assets")
+
+
+def make_manifest(
+    commit: str,
+    checks: list[Check],
+    *,
+    release_tag: str | None = None,
+    release_mode: str | None = None,
+) -> dict[str, Any]:
     if any(check.status == FAIL for check in checks):
         status = FAIL
     elif any(check.status == INCOMPLETE for check in checks):
@@ -374,6 +444,8 @@ def make_manifest(commit: str, checks: list[Check]) -> dict[str, Any]:
         "status": status,
         "releaseReady": status == PASS,
         "commit": commit,
+        "releaseTag": release_tag,
+        "releaseMode": release_mode,
         "generatedAtUnixMs": int(time.time() * 1_000),
         "platform": sys.platform,
         "checks": [check.to_mapping() for check in checks],
