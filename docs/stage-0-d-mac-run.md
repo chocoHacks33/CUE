@@ -105,6 +105,18 @@ Then run the **Recording test** with `CAM-HOST + master audio`: Start, wait 30 t
 - Each tile shows a "Who" line from B's observations: a name only for a confirmed consenting guest, with age and whether a named take is allowed. It reads "evidence off" until connected, and "unavailable" if B's routes are down.
 - A switch that draws no frame within 1 s is acknowledged FAILED and reverted; a red banner says so.
 
+## Stage 4: measurements and failure drills
+
+All of this needs the three Windows webcams, A's mic and the worker running. Export files and recordings are private; fill `docs/results/d-stage4-check.md` from them.
+
+- **Cuts.** Press 1/2/3 at least 30 times over a few minutes with all three renderable. The "Manual cuts" row shows press-to-picture p50/p95 and the gate. Backend-routed cuts (control link up) measure from the key press, not from the returned command.
+- **Failovers.** Ten times: cover the on-air webcam (or close its lid, or kill its publisher tab). Watch the tally go to the safety shot; the "Failovers" row shows loss-detected-to-picture and from-last-frame. Vary which camera fails and how.
+- **Soak.** Start the programme recording, then `Start 20-minute soak`. Leave the tab visible (a hidden tab throttles the draw loop and fails the run). After 20 minutes: `Stop soak`, `Export Stage 4 measurements`, `Stop recording`, `Download recording`, play the file in QuickTime or VLC.
+- **Clap tests.** Three claps in front of a light at the start and three after 15 minutes, per angle. Then `apps/api/.venv/bin/python scripts/av_skew.py <recording> --events 6`.
+- **HOLD drill.** With AUTO on and C's lane cutting, press H. The compositor holds at once; a cut that was already in flight is rejected with `STALE_MODE_REVISION` in the timeline.
+- **Link drill.** Stop uvicorn: the strip says DEGRADED, keys still work locally. Start it again: the link reconnects, and if the backend still says AUTO the compositor stays in ASSIST, shows a banner, and asks the backend to step down. Press `Enable AUTO` to re-arm.
+- **Recorder drill.** Fill or deny storage (Chrome site settings) mid-recording: red banner, live view continues, chunks so far are recoverable from the interrupted list after reload.
+
 ## Stage 2 controls (compositor)
 
 On the producer page, top of the right column. Keys work only when no input has focus.

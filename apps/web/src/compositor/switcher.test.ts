@@ -417,3 +417,32 @@ describe("failed acknowledgement", () => {
     expect(expired.state.program.source).toBe("SLATE");
   });
 });
+
+describe("stage 4 failure scenarios", () => {
+  it("a HOLD applied locally before the backend answers rejects a policy command computed against the old revision", () => {
+    // Backend and renderer agree on AUTO at revision 5; the backend issues a cut against revision 5.
+    const { state: synced } = syncControlState(liveOnHost(), { controlGeneration: "gen-1", mode: "AUTO", modeRevision: 5 }, 100);
+    const late = policyDecision(synced, "CAM-GUEST", 3000, { controlGeneration: "gen-1", modeRevision: 5 });
+    // The operator presses HOLD; the compositor applies it at once, without waiting for the backend.
+    const { state: holding } = operatorHold(synced, 3050);
+    expect(holding.mode).toBe("MANUAL_HOLD");
+    expect(holding.modeRevision).toBe(6);
+    // The in-flight command lands afterwards and is refused; the shot does not change.
+    const step = evaluateDecision(holding, late, allHealthy, 3060);
+    expect(step.ack?.rejectReason).toBe("STALE_MODE_REVISION");
+    expect(step.state.program.source).toBe("CAM-HOST");
+    // The backend then confirms HOLD at revision 6: no change, nothing lost.
+    const confirmed = syncControlState(step.state, { controlGeneration: "gen-1", mode: "MANUAL_HOLD", modeRevision: 6 }, 3100);
+    expect(confirmed.state).toBe(step.state);
+  });
+
+  it("a backend snapshot adopted as ASSIST after a reconnect parks a policy command instead of cutting", () => {
+    // The backend still says AUTO at revision 7, but the compositor adopts ASSIST (modeToAdopt) after the reconnect.
+    const { state } = syncControlState(liveOnHost(), { controlGeneration: "gen-2", mode: "ASSIST", modeRevision: 7 }, 100);
+    const command = policyDecision(state, "CAM-GUEST", 4000, { controlGeneration: "gen-2", modeRevision: 7 });
+    const step = evaluateDecision(state, command, allHealthy, 4000);
+    expect(step.ack?.rejectReason).toBe("ASSIST_SUGGEST_ONLY");
+    expect(step.state.suggestion?.target).toBe("CAM-GUEST");
+    expect(step.state.program.source).toBe("CAM-HOST");
+  });
+});

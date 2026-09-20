@@ -8,9 +8,10 @@ import {
   type ReceiverReadiness,
   type RenderAck,
   type RenderCommand,
+  LOCAL_GENERATION,
   SLATE,
 } from "@cue/contracts";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { pickRecordingMimeType, RECORDING_MIME_CANDIDATES, recordingFileName, formatBytes, formatDuration } from "../recording/recorderSupport";
 import { initialRecorderStatus, ProgramRecorder, type RecorderStatus } from "../recording/programRecorder";
@@ -34,8 +35,18 @@ import {
   backendClockOffsetMs,
   commandToDecision,
   idempotencyKey,
+  modeToAdopt,
   reconciliationFor,
 } from "./controlAdapter";
+import {
+  CUT_GATE,
+  cutGate,
+  type CutSample,
+  FAILOVER_GATE,
+  failoverGate,
+  type FailoverSample,
+} from "./measurements";
+import { readHeapUsedBytes, SOAK_GATE, type SoakSample, soakVerdict, summarizeSoak } from "./soak";
 import {
   acceptSuggestion,
   confirmDraw,
@@ -73,6 +84,13 @@ export interface ProgramPanelProps {
 
 const DRAW_INTERVAL_MS = 33;
 const HEALTH_INTERVAL_MS = 250;
+/** Stage 4: one soak sample a second; two hours bounded. Cut and failover samples bounded too. */
+const SOAK_SAMPLE_MS = 1000;
+const MAX_SOAK_SAMPLES = 7200;
+const MAX_MEASUREMENT_SAMPLES = 1000;
+const MAX_SEEN_DECISIONS = 2000;
+/** A press older than this cannot be the origin of an arriving manual command. */
+const PRESS_MATCH_WINDOW_MS = 5000;
 const KEY_FOR_CAMERA: Record<CameraId, string> = { "CAM-HOST": "1", "CAM-GUEST": "2", "CAM-WIDE": "3" };
 const MODE_HINT: Record<OperatorMode, string> = {
   SETUP: "no automatic cuts",
@@ -107,6 +125,23 @@ interface LinkState {
 
 const LINK_ERROR_TTL_MS = 8000;
 
+interface SoakRun {
+  running: boolean;
+  startedAtMs: number | null;
+  startedWallMs: number | null;
+  samples: SoakSample[];
+}
+
+function downloadJson(fileName: string, payload: unknown): void {
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.click();
+  window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
 export function ProgramPanel({
   eventId,
   rendererId,
@@ -133,11 +168,30 @@ export function ProgramPanel({
   const [noFrameSince, setNoFrameSince] = useState<number | null>(null);
   const [link, setLink] = useState<LinkState>({ status: "off", snapshot: null, lastError: null, lastErrorAtMs: null });
   const [linkEpoch, setLinkEpoch] = useState(0);
+  const [cutSamples, setCutSamples] = useState<CutSample[]>([]);
+  const [failovers, setFailovers] = useState<FailoverSample[]>([]);
+  const [soak, setSoak] = useState<SoakRun>({ running: false, startedAtMs: null, startedWallMs: null, samples: [] });
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const switcherRef = useRef(switcher);
   const readinessRef = useRef(readiness);
   readinessRef.current = readiness;
+  // Stage 4 sampling reads the latest values from refs so the intervals never close over stale state.
+  const recorderStatusRef = useRef(recorderStatus);
+  recorderStatusRef.current = recorderStatus;
+  const drawStatsRef = useRef({ drawIntervalMs, throttled });
+  drawStatsRef.current = { drawIntervalMs, throttled };
+  const linkStatusRef = useRef<LinkStatus>(link.status);
+  linkStatusRef.current = link.status;
+  const cutSamplesRef = useRef<CutSample[]>([]);
+  const failoversRef = useRef<FailoverSample[]>([]);
+  const pendingFailoverKeyRef = useRef<string | null>(null);
+  /** Press time per decision key, so a backend-routed TAKE measures from the press, not from the command. */
+  const pressAtRef = useRef(new Map<string, number>());
+  const lastPressRef = useRef<{ cameraId: CameraId; atMs: number } | null>(null);
+  /** True only after the operator pressed Enable AUTO here since the last connect or HOLD (plan section 9). */
+  const autoArmedRef = useRef(false);
+  const demotingRef = useRef(false);
   const lastDrawAtRef = useRef<number | null>(null);
   const noFrameSinceRef = useRef<number | null>(null);
   const recorderRef = useRef<ProgramRecorder | null>(null);
@@ -180,6 +234,33 @@ export function ProgramPanel({
       const ack = step.ack;
       if (!ack) return;
       onAck(ack);
+      if (ack.outcome === "APPLIED") {
+        // Stage 4: every landed cut is a latency sample; a landed failover completes its trial.
+        const key = `${ack.controlGeneration}.${ack.decisionSequence}`;
+        const program = step.state.program;
+        const decidedAtMs = program.decisionSequence === ack.decisionSequence ? program.sinceMs : ack.atMs;
+        const requestedAtMs = pressAtRef.current.get(key) ?? decidedAtMs;
+        pressAtRef.current.delete(key);
+        if (pressAtRef.current.size > 200) pressAtRef.current.clear();
+        const sample: CutSample = {
+          key,
+          origin: program.origin ?? "OPERATOR",
+          source: ack.renderedSource,
+          via: ack.issuerDecisionId === null ? "local" : "backend",
+          requestedAtMs,
+          decidedAtMs,
+          drawnAtMs: ack.atMs,
+        };
+        cutSamplesRef.current = [...cutSamplesRef.current, sample].slice(-MAX_MEASUREMENT_SAMPLES);
+        setCutSamples(cutSamplesRef.current);
+        if (pendingFailoverKeyRef.current === key) {
+          pendingFailoverKeyRef.current = null;
+          failoversRef.current = failoversRef.current.map((trial) =>
+            trial.key === key ? { ...trial, drawnAtMs: ack.atMs } : trial,
+          );
+          setFailovers(failoversRef.current);
+        }
+      }
       const offset = backendClockOffsetMs(performance.now(), Date.now());
       if (ack.issuerDecisionId !== null) {
         const acknowledgement = ackToAcknowledgement(ack, offset);
@@ -202,7 +283,22 @@ export function ProgramPanel({
     (command: RenderCommand) => {
       if (seenDecisionIdsRef.current.has(command.decisionId)) return;
       seenDecisionIdsRef.current.add(command.decisionId);
+      if (seenDecisionIdsRef.current.size > MAX_SEEN_DECISIONS) {
+        // Bounded for the soak: forget the oldest half. Duplicates that old are expired anyway.
+        const keep = [...seenDecisionIdsRef.current].slice(-MAX_SEEN_DECISIONS / 2);
+        seenDecisionIdsRef.current = new Set(keep);
+      }
       const now = performance.now();
+      const press = lastPressRef.current;
+      if (
+        press &&
+        command.cameraId === press.cameraId &&
+        command.reasonCode.toUpperCase().startsWith("MANUAL") &&
+        now - press.atMs < PRESS_MATCH_WINDOW_MS
+      ) {
+        pressAtRef.current.set(`${command.controlGeneration}.${command.decisionSequence}`, press.atMs);
+        lastPressRef.current = null;
+      }
       const withClock: SwitcherState = {
         ...switcherRef.current,
         backendClockOffsetMs: backendClockOffsetMs(now, Date.now()),
@@ -213,26 +309,58 @@ export function ProgramPanel({
     [applyStep],
   );
 
+  /**
+   * Adopt a backend snapshot. AUTO is adopted only while the operator has armed it
+   * here; otherwise the compositor stays in ASSIST and asks the backend to step
+   * down, so a reconnect, a refused HOLD or a backend restart never resumes AUTO
+   * on its own (plan section 9).
+   */
+  const adoptSnapshot = useCallback(
+    (snapshot: ControlSnapshot) => {
+      setLink((previous) => ({ ...previous, snapshot }));
+      const { adopt, demoteBackend } = modeToAdopt(snapshot.mode, autoArmedRef.current);
+      const step = syncControlState(
+        switcherRef.current,
+        { controlGeneration: snapshot.controlGeneration, mode: adopt, modeRevision: snapshot.modeRevision },
+        performance.now(),
+      );
+      if (step.state !== switcherRef.current) applyStep(step);
+      if (!demoteBackend || demotingRef.current || !linkConnectedRef.current) return;
+      demotingRef.current = true;
+      nonceRef.current += 1;
+      onLog(
+        `Backend is in AUTO at revision ${snapshot.modeRevision} but AUTO was not armed here; staying in ASSIST and asking the backend to step down`,
+      );
+      void setControlMode(
+        apiBaseUrl,
+        producerSecret.trim(),
+        eventId,
+        "ASSIST",
+        snapshot.modeRevision,
+        idempotencyKey("mode", Date.now(), `${rendererId}-${nonceRef.current}`),
+      )
+        .then((result) => setLink((previous) => ({ ...previous, snapshot: result.state })))
+        .catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          noteLinkError(`AUTO step-down refused: ${message}`);
+          onLog(`Backend refused the AUTO step-down: ${message}; compositor stays in ASSIST`);
+        })
+        .finally(() => {
+          demotingRef.current = false;
+        });
+    },
+    [apiBaseUrl, applyStep, eventId, noteLinkError, onLog, producerSecret, rendererId],
+  );
+
   const handleServerMessage = useCallback(
     (message: ControlServerMessage) => {
       switch (message.type) {
         case "control.authenticated":
           onLog(`Control link authenticated as ${message.role}`);
           break;
-        case "control.state": {
-          setLink((previous) => ({ ...previous, snapshot: message.state }));
-          const step = syncControlState(
-            switcherRef.current,
-            {
-              controlGeneration: message.state.controlGeneration,
-              mode: message.state.mode,
-              modeRevision: message.state.modeRevision,
-            },
-            performance.now(),
-          );
-          if (step.state !== switcherRef.current) applyStep(step);
+        case "control.state":
+          adoptSnapshot(message.state);
           break;
-        }
         case "render.command":
           handleCommand(message.command);
           break;
@@ -248,7 +376,7 @@ export function ProgramPanel({
           break;
       }
     },
-    [applyStep, handleCommand, noteLinkError, onLog],
+    [adoptSnapshot, handleCommand, noteLinkError, onLog],
   );
 
   // Event or renderer generation changed: never resume AUTO, forget pending work.
@@ -264,6 +392,7 @@ export function ProgramPanel({
       const reset = resetForGeneration(current, rendererGeneration);
       switcherRef.current = reset;
       setSwitcher(reset);
+      autoArmedRef.current = false;
       onLog(`Renderer generation ${rendererGeneration}: mode back to ASSIST, revision ${reset.modeRevision}`);
     }
   }, [eventId, rendererGeneration, rendererId, onLog]);
@@ -299,6 +428,8 @@ export function ProgramPanel({
           onMessage: handleServerMessage,
           onConnectionChange: (isConnected) => {
             linkConnectedRef.current = isConnected;
+            // Any connect or drop disarms AUTO: the operator re-enables it explicitly (plan section 9).
+            autoArmedRef.current = false;
             setLink((previous) => ({
               ...previous,
               status: isConnected ? "connected" : previous.status === "off" ? "off" : "reconnecting",
@@ -445,12 +576,81 @@ export function ProgramPanel({
       const now = performance.now();
       const expired = expirePendingAck(switcherRef.current, readinessRef.current, now);
       if (expired.state !== switcherRef.current) applyStep(expired);
-      const step = runHealthCheck(switcherRef.current, readinessRef.current, now);
-      if (step.state !== switcherRef.current) applyStep(step);
+      const before = switcherRef.current;
+      const step = runHealthCheck(before, readinessRef.current, now);
+      if (step.state !== before) {
+        const next = step.state.program;
+        if (
+          next !== before.program &&
+          next.sinceMs === now &&
+          (next.reason === "FAILOVER_SAFE" || next.reason === "FAILOVER_SLATE")
+        ) {
+          // Stage 4: a failover trial starts here and completes on its APPLIED acknowledgement.
+          const failedSlot = readinessRef.current?.slots.find((slot) => slot.cameraId === before.program.source) ?? null;
+          const key = `${LOCAL_GENERATION}.${next.decisionSequence}`;
+          const trial: FailoverSample = {
+            key,
+            from: before.program.source,
+            target: next.source,
+            reason: next.reason,
+            lossStartMs: before.programUnhealthySinceMs ?? now,
+            cutIssuedMs: now,
+            lastFrameAgeAtCutMs: failedSlot?.lastFrameAgeMs ?? null,
+            drawnAtMs: null,
+          };
+          pendingFailoverKeyRef.current = key;
+          failoversRef.current = [...failoversRef.current, trial].slice(-MAX_MEASUREMENT_SAMPLES);
+          setFailovers(failoversRef.current);
+        }
+        applyStep(step);
+      }
       refreshAudioRef.current();
     }, HEALTH_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [applyStep]);
+
+  // Stage 4 soak: one sample a second while running, read from refs.
+  useEffect(() => {
+    if (!soak.running) return;
+    const id = window.setInterval(() => {
+      const now = performance.now();
+      const state = switcherRef.current;
+      const current = readinessRef.current;
+      const recorder = recorderStatusRef.current;
+      const draw = drawStatsRef.current;
+      const sample: SoakSample = {
+        atMs: now,
+        wallMs: Date.now(),
+        slots:
+          current?.slots.map((slot) => ({
+            cameraId: slot.cameraId,
+            frameCount: slot.frameCount,
+            lastFrameAgeMs: slot.lastFrameAgeMs,
+            renderable: slot.renderable,
+            streamEpoch: slot.streamEpoch,
+            videoTrackSid: slot.videoTrackSid,
+          })) ?? [],
+        masterAudioTrackId: getMasterAudioTrack()?.id ?? null,
+        masterAudioAttached: current?.masterAudio.attached ?? false,
+        programSource: state.program.source,
+        live: isLive(state),
+        mode: state.mode,
+        drawIntervalMs: draw.drawIntervalMs,
+        throttled: draw.throttled,
+        recorderPhase: recorder.phase,
+        recorderChunks: recorder.chunkCount,
+        recorderBytes: recorder.bytes,
+        recorderPersistFailures: recorder.persistFailures,
+        heapUsedBytes: readHeapUsedBytes(),
+        linkStatus: linkStatusRef.current,
+        ackCount: state.acks.length,
+      };
+      setSoak((previous) =>
+        previous.running ? { ...previous, samples: [...previous.samples, sample].slice(-MAX_SOAK_SAMPLES) } : previous,
+      );
+    }, SOAK_SAMPLE_MS);
+    return () => window.clearInterval(id);
+  }, [soak.running, getMasterAudioTrack]);
 
   /** Operator TAKE: through the backend when the control link is up, locally otherwise. */
   const requestTake = useCallback(
@@ -460,6 +660,7 @@ export function ProgramPanel({
       const slot = readinessRef.current?.slots.find((candidate) => candidate.cameraId === cameraId);
       if (linkConnectedRef.current && slot?.streamEpoch) {
         nonceRef.current += 1;
+        lastPressRef.current = { cameraId, atMs: now };
         void takeCamera(
           apiBaseUrl,
           producerSecret.trim(),
@@ -484,11 +685,19 @@ export function ProgramPanel({
     [apiBaseUrl, applyStep, eventId, handleCommand, noteLinkError, onLog, producerSecret, rendererId],
   );
 
-  /** Mode changes (HOLD, ASSIST, AUTO): through the backend when linked, locally otherwise. */
+  /**
+   * Mode changes. HOLD is applied locally first and never waits for the network
+   * (Stage 4 must-pass: a late policy reply after HOLD is rejected by revision).
+   * ASSIST and AUTO go through the backend when linked, locally otherwise.
+   * Leaving AUTO by hand disarms it; only a fresh Enable AUTO re-arms it.
+   */
   const requestMode = useCallback(
     (mode: Extract<OperatorMode, "ASSIST" | "AUTO" | "MANUAL_HOLD">) => {
       const now = performance.now();
       const state = switcherRef.current;
+      const expectedRevision = state.modeRevision;
+      if (mode !== "AUTO") autoArmedRef.current = false;
+      if (mode === "MANUAL_HOLD") applyStep(operatorHold(state, now));
       if (linkConnectedRef.current) {
         nonceRef.current += 1;
         void setControlMode(
@@ -496,33 +705,28 @@ export function ProgramPanel({
           producerSecret.trim(),
           eventId,
           mode,
-          state.modeRevision,
+          expectedRevision,
           idempotencyKey("mode", Date.now(), `${rendererId}-${nonceRef.current}`),
         )
           .then((result) => {
-            const step = syncControlState(
-              switcherRef.current,
-              {
-                controlGeneration: result.state.controlGeneration,
-                mode: result.state.mode,
-                modeRevision: result.state.modeRevision,
-              },
-              performance.now(),
-            );
-            if (step.state !== switcherRef.current) applyStep(step);
-            setLink((previous) => ({ ...previous, snapshot: result.state }));
+            if (mode === "AUTO") autoArmedRef.current = true;
+            adoptSnapshot(result.state);
           })
           .catch((error) => {
             const message = error instanceof Error ? error.message : String(error);
             noteLinkError(`Mode ${mode} refused: ${message}`);
-            onLog(`Backend refused mode ${mode}: ${message}`);
+            onLog(
+              mode === "MANUAL_HOLD"
+                ? `Backend refused HOLD: ${message}; this compositor is holding anyway and rejects policy cuts`
+                : `Backend refused mode ${mode}: ${message}`,
+            );
           });
         return;
       }
-      if (mode === "MANUAL_HOLD") applyStep(operatorHold(state, now));
-      else applyStep(operatorResume(state, mode, now));
+      if (mode === "AUTO") autoArmedRef.current = true;
+      if (mode !== "MANUAL_HOLD") applyStep(operatorResume(state, mode, now));
     },
-    [apiBaseUrl, applyStep, eventId, noteLinkError, onLog, producerSecret, rendererId],
+    [adoptSnapshot, apiBaseUrl, applyStep, eventId, noteLinkError, onLog, producerSecret, rendererId],
   );
 
   /** Emergency slate is always local: it must work with the backend gone. Reconciled afterwards. */
@@ -650,13 +854,50 @@ export function ProgramPanel({
   }
 
   function downloadTimeline() {
-    const blob = new Blob([JSON.stringify({ eventId, rendererId, rendererGeneration, exportedAt: new Date().toISOString(), acks: switcher.acks }, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `cue-decisions-${eventId}-${Date.now()}.json`;
-    anchor.click();
-    window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
+    downloadJson(`cue-decisions-${eventId}-${Date.now()}.json`, {
+      eventId,
+      rendererId,
+      rendererGeneration,
+      exportedAt: new Date().toISOString(),
+      acks: switcher.acks,
+    });
+  }
+
+  function startSoak() {
+    const startedAtMs = performance.now();
+    setSoak({ running: true, startedAtMs, startedWallMs: Date.now(), samples: [] });
+    onLog(`Stage 4 soak started; target ${SOAK_GATE.minDurationMs / 60_000} minutes with all feeds, worker and recorder running`);
+  }
+
+  function stopSoak() {
+    setSoak((previous) => ({ ...previous, running: false }));
+    onLog("Stage 4 soak stopped; export the measurements and play the recording outside the app");
+  }
+
+  const cutResult = useMemo(() => cutGate(cutSamples), [cutSamples]);
+  const failoverResult = useMemo(() => failoverGate(failovers), [failovers]);
+  const soakSummary = useMemo(() => summarizeSoak(soak.samples), [soak.samples]);
+  const soakResult = useMemo(() => soakVerdict(soakSummary), [soakSummary]);
+
+  function exportMeasurements() {
+    downloadJson(`cue-stage4-${eventId}-${Date.now()}.json`, {
+      exportedAt: new Date().toISOString(),
+      eventId,
+      rendererId,
+      rendererGeneration,
+      userAgent: navigator.userAgent,
+      gates: { cut: CUT_GATE, failover: FAILOVER_GATE, soak: SOAK_GATE },
+      cuts: { gate: cutResult, samples: cutSamples },
+      failovers: { gate: failoverResult, samples: failovers },
+      soak: {
+        running: soak.running,
+        startedWallMs: soak.startedWallMs,
+        verdict: soakResult,
+        summary: soakSummary,
+        samples: soak.samples,
+      },
+      acks: switcher.acks,
+    });
   }
 
   const now = performance.now();
@@ -719,6 +960,11 @@ export function ProgramPanel({
         </p>
       )}
       {recentLinkError && <p className="banner banner-warn">Backend: {recentLinkError}</p>}
+      {link.snapshot?.mode === "AUTO" && switcher.mode !== "AUTO" && (
+        <p className="banner banner-warn">
+          Backend is in AUTO but this compositor has not armed AUTO since the last connect or HOLD. Policy cuts are parked as suggestions. Press Enable AUTO to resume.
+        </p>
+      )}
       {(recorderStatus.phase === "error" || recorderStatus.persistFailures > 0) && (
         <p className="banner banner-error">
           Recording problem: {recorderStatus.lastError ?? `${recorderStatus.persistFailures} chunks not persisted`}. Live output continues.
@@ -861,6 +1107,70 @@ export function ProgramPanel({
           </p>
         </div>
       )}
+
+      <div className="stage4">
+        <div className="preview-heading">
+          <div>
+            <p className="eyebrow">STAGE 4 · MEASUREMENTS</p>
+            <h3>Cut latency, failover, soak</h3>
+          </div>
+          <div className="inline-actions">
+            {soak.running ? (
+              <button type="button" className="danger" onClick={stopSoak}>
+                Stop soak
+              </button>
+            ) : (
+              <button type="button" className="primary" onClick={startSoak} disabled={!connected}>
+                Start {SOAK_GATE.minDurationMs / 60_000}-minute soak
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={exportMeasurements}
+              disabled={cutSamples.length === 0 && failovers.length === 0 && soak.samples.length === 0}
+            >
+              Export Stage 4 measurements
+            </button>
+          </div>
+        </div>
+        <dl className="connection-details">
+          <dt>Manual cuts</dt>
+          <dd className={`gate-${cutResult.status}`}>
+            {cutResult.stats.count} operator cut{cutResult.stats.count === 1 ? "" : "s"}
+            {cutResult.stats.count > 0
+              ? ` · press to picture p50 ${Math.round(cutResult.stats.p50 ?? 0)} ms · p95 ${Math.round(cutResult.stats.p95 ?? 0)} ms · max ${Math.round(cutResult.stats.max ?? 0)} ms`
+              : ""}
+            {` · ${cutResult.status}: ${cutResult.detail}`}
+          </dd>
+          <dt>Failovers</dt>
+          <dd className={`gate-${failoverResult.status}`}>
+            {failovers.length} trial{failovers.length === 1 ? "" : "s"}
+            {failoverResult.stats.count > 0
+              ? ` · loss detected to safe picture p95 ${Math.round(failoverResult.stats.p95 ?? 0)} ms · max ${Math.round(failoverResult.stats.max ?? 0)} ms`
+              : ""}
+            {failoverResult.fromLastFrame.max !== null ? ` · from last frame max ${Math.round(failoverResult.fromLastFrame.max)} ms` : ""}
+            {` · ${failoverResult.status}: ${failoverResult.detail}`}
+          </dd>
+          <dt>Soak</dt>
+          <dd className={`gate-${soakResult.status}`}>
+            {soak.samples.length === 0
+              ? soak.running ? "running · first sample due" : "not started"
+              : `${soak.running ? "running" : "stopped"} · ${formatDuration(soakSummary.durationMs)} · ${soak.samples.length} samples · ${soakResult.status}`}
+          </dd>
+        </dl>
+        {soak.samples.length > 0 && (
+          <ul className="checks">
+            {soakResult.checks.map((check) => (
+              <li key={check.name} className={`gate-${check.status}`}>
+                {check.name}: {check.status} · {check.detail}
+              </li>
+            ))}
+          </ul>
+        )}
+        <p className="detail">
+          Nothing here counts until it ran with the real cameras and the master microphone. The export is the evidence for docs/results/d-stage4-check.md.
+        </p>
+      </div>
 
       {interrupted.length > 0 && (
         <div className="interrupted">
