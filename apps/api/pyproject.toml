@@ -36,6 +36,7 @@ cue-guests = "cue_api.guests.enrolment_cli:main"
 cue-stage2-fixture = "cue_api.stage2_fixture_cli:main"
 cue-stage7-preflight = "cue_api.morning_preflight_cli:main"
 cue-stage4-gate = "cue_api.stage4_gate_cli:main"
+cue-offline-handoff = "cue_api.offline_handoff_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
