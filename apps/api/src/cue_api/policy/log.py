@@ -11,7 +11,9 @@ import dataclasses
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
+
+Identity = Literal["ROLE_BASED", "VERIFIED"]
 
 
 @dataclass
@@ -50,6 +52,12 @@ class DecisionRecord:
 
     # Wall-clock latencies for the pipeline (ms).
     latencies_ms: dict[str, float] = field(default_factory=dict)
+
+    # Identity mode used to name a guest:
+    #   ROLE_BASED — role_map lookup only, no face verification
+    #   VERIFIED   — B's visual observation confirmed the guest
+    # This replaces the Stage-3 latencies_ms["_identity"] sentinel.
+    identity: Identity = "ROLE_BASED"
 
     # Provenance so replayed / fixture-driven entries are distinguishable.
     source: str = "LIVE"
@@ -96,6 +104,7 @@ def record_from_session_decision(
     cameras_considered: list[CameraConsideration] | None = None,
     latencies_ms: dict[str, float] | None = None,
     source: str = "LIVE",
+    identity: Identity = "ROLE_BASED",
 ) -> DecisionRecord:
     """Construct a DecisionRecord from the outputs of DirectorSession."""
     transcript_span = None
@@ -129,6 +138,7 @@ def record_from_session_decision(
         cameras_considered=[dataclasses.asdict(c) for c in (cameras_considered or [])],
         latencies_ms=dict(latencies_ms or {}),
         source=source,
+        identity=identity,
     )
 
 

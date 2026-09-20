@@ -117,7 +117,21 @@ python scripts/soak_c_lane.py --minutes 20
 | Queue depth (soak) | `soak_c_lane.py` → `max_queue_depth` |
 | Memory growth (soak) | `soak_c_lane.py` → `rss_delta_mb` (Mac/Linux only) |
 | Log growth (soak) | `soak_c_lane.py` → `log_bytes` |
-| Identity mode disclosure | `LiveLane` → `latencies_ms._identity == 1.0` = ROLE_BASED |
+| Identity mode disclosure | `LiveLane` → `DecisionRecord.identity == "ROLE_BASED"` (or `"VERIFIED"`) |
+
+## Open requests
+
+**A — wire schema for the new `identity` field.**
+- `DecisionRecord.identity: "ROLE_BASED" | "VERIFIED"` replaces the
+  Stage-3 `latencies_ms["_identity"]` sentinel. My wire adapter
+  (`cue_api.policy.wire.DecisionEvent`) already carries it as
+  `identity` (camelCase on the wire) with a default of `"ROLE_BASED"`,
+  so an old client that ignores the field still works. The schema
+  proposal in `docs/contracts-proposal/decision_record.schema.json`
+  lists it as an optional string enum.
+- **Please confirm this addition is acceptable on the wire.** If you
+  need me to strip it before send-time, tell me and I will drop it in
+  `to_wire()`; the field stays on my record either way.
 
 ## Recommendation (today, offline evidence only)
 

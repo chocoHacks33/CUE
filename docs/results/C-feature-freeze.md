@@ -18,7 +18,8 @@ to post-demo.
 - `cue_api.semantics.parser.parse(...)` — with `programme`, `roster`,
   `context`, `hard_timeout_s` kwargs.
 - `cue_api.policy.log.DecisionRecord` — including the `latencies_ms`
-  timeline (`final_ms`, `cue_decide_ms`, `_identity`).
+  timeline (`final_ms`, `cue_decide_ms`) and the new `identity` enum
+  field (`"ROLE_BASED"` | `"VERIFIED"`).
 
 **Scripts**
 - `scripts/live_lane.py` — single-laptop end-to-end runner.
@@ -72,10 +73,11 @@ to post-demo.
    `endpointing_ms + processing`. Sub-endpointing readings mean the
    calculation is wrong. Flux (v2) is faster but not yet the pinned
    ASR — see `docs/C-INTEGRATION.md` Stage-3 section for the switch.
-2. **`_identity` sentinel lives in `latencies_ms`.** That is a
-   deliberate side-door — I did not want to change `DecisionRecord`'s
-   shape at freeze time. Consumers read
-   `latencies_ms.get("_identity")` (1.0 = ROLE_BASED, 0.0 = identity).
+2. **Identity mode lives on its own field.** `DecisionRecord.identity`
+   is `"ROLE_BASED"` or `"VERIFIED"`. The Stage-3 sentinel
+   (`latencies_ms["_identity"]`) has been removed. `DecisionEvent`
+   carries it as `identity` on the wire; A is asked to confirm the
+   schema extension in `docs/results/C-stage4.md` open requests.
 3. **Memory measurement in soak is Unix-only.** On Windows the memory
    invariant is skipped; the Mac soak must confirm the 50 MB / 20 min
    ceiling.

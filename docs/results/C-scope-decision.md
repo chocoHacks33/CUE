@@ -49,12 +49,11 @@ confirms with the CTA. That surface is already wired.
 
 B's unknown-person rejection has not been validated against my roster
 IDs in a joint run. Until it is, ship **role-based** mapping. Every
-`DecisionRecord` from `LiveLane` carries
-`latencies_ms["_identity"] = 1.0`. This is a sentinel: the UI treats
-`1.0` as "ROLE_BASED" and does not render "identified as" text; the
-demo script should disclose the mode aloud. When B's provider is
-validated, flip `LiveLane(role_based=False)` and the sentinel becomes
-`0.0`.
+`DecisionRecord` from `LiveLane` carries `identity="ROLE_BASED"` — a
+proper enum field, not a sentinel. The compositor MUST NOT render
+"identified as" text when `identity == "ROLE_BASED"`. The demo script
+should disclose the mode aloud. When B's provider is validated, flip
+`LiveLane(role_based=False)` and `identity` becomes `"VERIFIED"`.
 
 ## What the Mac run needs to change
 

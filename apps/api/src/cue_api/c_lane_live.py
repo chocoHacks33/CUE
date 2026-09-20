@@ -355,12 +355,10 @@ class LiveLane:
             record.latencies_ms["cue_decide_ms"] = max(
                 0.0, (time.monotonic() - self._last_final_wall_s) * 1000,
             )
-        # ROLE_BASED tag lives inside latencies_ms as a sentinel key so we
-        # don't have to change DecisionRecord's shape. Consumers can read
-        # `record.latencies_ms.get("_identity")` (1.0 or 0.0) if present.
-        record.latencies_ms.setdefault(
-            "_identity", 1.0 if self._role_based else 0.0,
-        )
+        # Identity mode: role_based skips B's face check entirely and uses
+        # role_map only. Stamped on every record so the compositor can't
+        # mistake a role-based cut for face recognition.
+        record.identity = "ROLE_BASED" if self._role_based else "VERIFIED"
         event = to_wire(record)
         try:
             self._sender.send(event, decision_seq=record.decision_seq)
