@@ -163,6 +163,57 @@ export interface EventEndReceipt {
   endedAtMs: number;
 }
 
+export const STAGE4_PROBE_AREAS = [
+  "ROUTING_RECONNECT",
+  "SOURCE_LOSS",
+  "BACKEND_FAILURE",
+  "SPEECH_PROVIDER_FAILURE",
+  "SEMANTIC_PROVIDER_FAILURE",
+  "EVENT_ACCESS",
+  "OBSERVER_CONTROL",
+] as const;
+export type Stage4ProbeArea = (typeof STAGE4_PROBE_AREAS)[number];
+export type Stage4EvidenceKind = "AUTOMATED" | "REPLAY" | "LIVE";
+export type Stage4GateStatus = "PASS" | "FAIL" | "INCOMPLETE";
+
+export interface Stage4Trial {
+  trialId: string;
+  area: Stage4ProbeArea;
+  passed: boolean;
+  evidenceKind: Stage4EvidenceKind;
+  latencyMs: number | null;
+  detail: string;
+}
+
+export interface Stage4AreaAssessment {
+  area: Stage4ProbeArea;
+  status: Stage4GateStatus;
+  qualifyingTrials: number;
+  requiredTrials: number;
+  p95LatencyMs: number | null;
+  blockingReasons: string[];
+}
+
+export interface Stage4Assessment {
+  status: Stage4GateStatus;
+  autoEligible: boolean;
+  disclosure: string;
+  blockingReasons: string[];
+  areas: Stage4AreaAssessment[];
+}
+
+export interface Stage4EvidenceReport {
+  contractVersion: typeof CONTRACT_VERSION;
+  eventId: string;
+  trials: Stage4Trial[];
+  assessment: Stage4Assessment;
+}
+
+export interface Stage4TrialMutationResponse {
+  created: boolean;
+  report: Stage4EvidenceReport;
+}
+
 export function isCameraId(value: string): value is CameraId {
   return CAMERA_IDS.includes(value as CameraId);
 }

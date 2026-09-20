@@ -144,3 +144,29 @@ def test_wire_event_is_pydantic_and_validates_new_instance_from_wire_json():
     assert round_trip.decision_seq == rec.decision_seq
     assert round_trip.source == "FIXTURE"
     assert round_trip.plain_reason.startswith("CUE cut to")
+
+
+def test_identity_defaults_to_role_based_and_survives_wire():
+    rec = record_from_session_decision(_sd(), at=0.0, cue=_cue())
+    ev = to_wire(rec)
+    assert rec.identity == "ROLE_BASED"
+    assert ev.identity == "ROLE_BASED"
+    d = json.loads(to_wire_json(rec))
+    assert d["identity"] == "ROLE_BASED"
+
+
+def test_identity_verified_survives_wire_round_trip():
+    rec = record_from_session_decision(
+        _sd(), at=0.0, cue=_cue(), identity="VERIFIED",
+    )
+    ev = to_wire(rec)
+    assert rec.identity == "VERIFIED"
+    assert ev.identity == "VERIFIED"
+
+
+def test_identity_garbage_clamps_to_role_based_on_wire():
+    """A rogue caller that sets an unknown identity must not break the wire."""
+    rec = record_from_session_decision(_sd(), at=0.0, cue=_cue())
+    rec.identity = "SOMETHING_ELSE"  # type: ignore[assignment]
+    ev = to_wire(rec)
+    assert ev.identity == "ROLE_BASED"

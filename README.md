@@ -55,6 +55,8 @@ Person B's work is one document per stage:
 - [docs/b-stage-2.md](docs/b-stage-2.md) — the live wiring: A's frames in, observations posted, epochs and withdrawals handled
 - [docs/b-stage-3-prep.md](docs/b-stage-3-prep.md) — the measuring instrument: calibration fitting, threshold selection, identity-report tallies
 - [docs/b-stage-3.md](docs/b-stage-3.md) — carrying a fitted calibration, and the tooling that runs the held-out trials
+- [docs/b-stage-4-prep.md](docs/b-stage-4-prep.md) — the AUTO-vs-ASSIST exit gate, the consent/deletion test, and the capture envelope
+- [docs/b-stage-4.md](docs/b-stage-4.md) — the readiness endpoint, and the trials recorded as NOT RUN
 
 ```bash
 python -m pip install -e "apps/api[dev]"           # core, no OpenCV needed
@@ -84,6 +86,8 @@ Person A's Stage 1 protocol, frame/PCM contracts and physical handoff are in [do
 Person A's Stage 2 control, health, ingestion and integration work is documented in [docs/stage-2-a-handoff.md](docs/stage-2-a-handoff.md). A's automated fixture is complete; D's real three-camera Mac acceptance rows remain the system gate.
 
 Person A's complete Stage 3 transport/reconnect integration is documented in [docs/stage-3-a-handoff.md](docs/stage-3-a-handoff.md). The automated implementation is complete; the real three-laptop live sequence on D's Mac remains the Stage 3 system gate.
+
+Person A's Stage 4 failure hardening and fail-closed evidence gate are documented in [docs/stage-4-a-handoff.md](docs/stage-4-a-handoff.md). The code and automated checks are complete; D must still run the listed physical failure trials before A's gate can authorise AUTO.
 
 ## Producer receiver (Person D's Mac)
 

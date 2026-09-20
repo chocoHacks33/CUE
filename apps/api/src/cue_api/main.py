@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import FastAPI, Header, HTTPException, Path, Response, status
@@ -25,6 +26,9 @@ from cue_api.contracts import (
     PublisherTokenResponse,
     ReceiverTokenRequest,
     ReceiverTokenResponse,
+    Stage4EvidenceReportResponse,
+    Stage4TrialMutationResponse,
+    Stage4TrialRequest,
     TopologyResponse,
     TransportMutationResponse,
     VideoTrackMutationRequest,
@@ -32,6 +36,7 @@ from cue_api.contracts import (
 from cue_api.control import ControlSessionStore, ControlStore
 from cue_api.control_socket import ControlHub, build_control_router, build_control_websocket
 from cue_api.guests import GuestRegistry, ObservationStore, build_guest_router
+from cue_api.guests.identity_evidence import IdentityEvidence, gather
 from cue_api.lifecycle import EventLifecycleCoordinator
 from cue_api.livekit_tokens import (
     LiveKitPublisherTokenIssuer,
@@ -41,6 +46,13 @@ from cue_api.livekit_tokens import (
 )
 from cue_api.readiness import ReadinessStore
 from cue_api.settings import Settings
+from cue_api.stage4_gate import (
+    EvidenceKind,
+    ProbeArea,
+    Stage4EvidenceStore,
+    TrialConflictError,
+    TrialResult,
+)
 from cue_api.transport import TransportCoordinator
 
 EventIdPath = Annotated[
@@ -55,7 +67,9 @@ def create_app(
     receiver_token_issuer: ReceiverTokenIssuer | None = None,
     guest_registry: GuestRegistry | None = None,
     observation_store: ObservationStore | None = None,
+    identity_evidence: Callable[[], IdentityEvidence] | None = None,
     admission_store: AdmissionStore | None = None,
+    stage4_evidence_store: Stage4EvidenceStore | None = None,
 ) -> FastAPI:
     app_settings = settings or Settings()
     issuer = token_issuer or LiveKitPublisherTokenIssuer(app_settings)
@@ -70,6 +84,7 @@ def create_app(
     control_sessions = ControlSessionStore()
     control_hub = ControlHub()
     readiness_store = ReadinessStore()
+    stage4_evidence = stage4_evidence_store or Stage4EvidenceStore()
     transport = TransportCoordinator(admissions, observations)
     lifecycle = EventLifecycleCoordinator(
         admissions=admissions,
@@ -149,6 +164,27 @@ def create_app(
             lifecycle.require_active(event_id)
         except AdmissionError as error:
             raise_admission(error)
+
+    def stage4_report(event_id: str) -> Stage4EvidenceReportResponse:
+        trials = stage4_evidence.list(event_id)
+        assessment = stage4_evidence.assess(event_id)
+        return Stage4EvidenceReportResponse.model_validate(
+            {
+                "eventId": event_id,
+                "trials": [
+                    {
+                        "trialId": trial.trial_id,
+                        "area": trial.area.value,
+                        "passed": trial.passed,
+                        "evidenceKind": trial.evidence_kind.value,
+                        "latencyMs": trial.latency_ms,
+                        "detail": trial.detail,
+                    }
+                    for trial in trials
+                ],
+                "assessment": assessment.to_mapping(),
+            }
+        )
 
     @app.get("/health/live", response_model=HealthResponse)
     def health_live() -> HealthResponse:
@@ -477,11 +513,51 @@ def create_app(
         await control_hub.close_event(event_id)
         return receipt
 
+    @app.post(
+        "/api/v1/events/{event_id}/stage4/trials",
+        response_model=Stage4TrialMutationResponse,
+        status_code=status.HTTP_201_CREATED,
+    )
+    def record_stage4_trial(
+        event_id: EventIdPath,
+        payload: Stage4TrialRequest,
+        x_cue_producer_secret: str | None = Header(default=None),
+    ) -> Stage4TrialMutationResponse:
+        """Record authenticated evidence from one deliberate Stage 4 trial."""
+        require_producer(x_cue_producer_secret)
+        require_active_event(event_id)
+        trial = TrialResult(
+            trial_id=payload.trial_id,
+            area=ProbeArea(payload.area),
+            passed=payload.passed,
+            evidence_kind=EvidenceKind(payload.evidence_kind),
+            latency_ms=payload.latency_ms,
+            detail=payload.detail,
+        )
+        try:
+            created = stage4_evidence.record(event_id, trial)
+        except TrialConflictError as error:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(error)) from error
+        return Stage4TrialMutationResponse(created=created, report=stage4_report(event_id))
+
+    @app.get(
+        "/api/v1/events/{event_id}/stage4/report",
+        response_model=Stage4EvidenceReportResponse,
+    )
+    def get_stage4_report(
+        event_id: EventIdPath,
+        x_cue_producer_secret: str | None = Header(default=None),
+    ) -> Stage4EvidenceReportResponse:
+        """Return retained evidence and the current fail-closed assessment."""
+        require_producer(x_cue_producer_secret)
+        return stage4_report(event_id)
+
     app.include_router(
         build_guest_router(
             app_settings,
             registry,
             observations,
+            evidence=identity_evidence or gather,
             ensure_event_active=require_active_event,
         )
     )
@@ -504,6 +580,7 @@ def create_app(
     app.state.readiness_store = readiness_store
     app.state.transport_coordinator = transport
     app.state.lifecycle = lifecycle
+    app.state.stage4_evidence = stage4_evidence
 
     return app
 

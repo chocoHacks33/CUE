@@ -596,3 +596,101 @@ export function parsePurgeReceipt(value: unknown): PurgeReceipt {
     purgedAtMs: asNumber(root, "purgedAtMs", "receipt"),
   };
 }
+
+// ---------------------------------------------------------------------------
+// Identity readiness. Stage 4's exit gate, as the producer UI sees it.
+//
+// The rule this encodes: whenever a name on screen came from a face, the
+// disclosure has to be visible. There is no state in which identity is used and
+// nothing is said about it, so `disclosure` is never empty.
+// ---------------------------------------------------------------------------
+
+export const NAMING_POLICIES = ["NAMED_AUTO", "NAMED_ASSIST", "ROLE_BASED"] as const;
+export type NamingPolicy = (typeof NAMING_POLICIES)[number];
+
+export interface IdentityReadiness {
+  guestContractVersion: typeof GUEST_CONTRACT_VERSION;
+  eventId: string;
+  namingPolicy: NamingPolicy;
+  /** Pass to the director: true means names come from the roster, not from faces. */
+  roleBased: boolean;
+  /** False means an operator must confirm every named shot before it airs. */
+  unattendedNamingPermitted: boolean;
+  calibrationStatus: CalibrationStatus;
+  /** Show this whenever identity is in play. Never empty. */
+  disclosure: string;
+  /** Why the policy is not more permissive. Empty only for NAMED_AUTO. */
+  blockingReasons: string[];
+  /** Who attested to each hardware check, and which document backs it. */
+  attestations: Record<string, string>;
+}
+
+export function parseIdentityReadiness(value: unknown): IdentityReadiness {
+  const root = asRecord(value, "readiness");
+
+  if (root.guestContractVersion !== GUEST_CONTRACT_VERSION) {
+    throw new Error(
+      `Unsupported guest contract version: ${String(root.guestContractVersion)}`,
+    );
+  }
+
+  const namingPolicy = asString(root, "namingPolicy", "readiness");
+  if (!NAMING_POLICIES.includes(namingPolicy as NamingPolicy)) {
+    throw new Error(`Unknown naming policy: ${namingPolicy}`);
+  }
+
+  const calibrationStatus = asString(root, "calibrationStatus", "readiness");
+  if (!CALIBRATION_STATUSES.includes(calibrationStatus as CalibrationStatus)) {
+    throw new Error(`Unknown calibration status: ${calibrationStatus}`);
+  }
+
+  const roleBased = root.roleBased;
+  const unattended = root.unattendedNamingPermitted;
+  if (typeof roleBased !== "boolean" || typeof unattended !== "boolean") {
+    throw new Error("readiness.roleBased and unattendedNamingPermitted must be booleans");
+  }
+
+  const disclosure = asString(root, "disclosure", "readiness");
+  if (!disclosure.trim()) {
+    throw new Error("A readiness with no disclosure cannot be shown to an audience");
+  }
+
+  // ROLE_BASED must never claim naming from a face, and unattended naming is
+  // only ever permitted by NAMED_AUTO. Contradictions are refused rather than
+  // rendered, because the UI would otherwise show a reassuring impossibility.
+  if (namingPolicy === "ROLE_BASED" && !roleBased) {
+    throw new Error("ROLE_BASED must set roleBased");
+  }
+  if (namingPolicy !== "NAMED_AUTO" && unattended) {
+    throw new Error(`${namingPolicy} cannot permit unattended naming`);
+  }
+  if (namingPolicy === "NAMED_AUTO" && !unattended) {
+    throw new Error("NAMED_AUTO must permit unattended naming");
+  }
+
+  const attestations = asRecord(root.attestations ?? {}, "readiness.attestations");
+  const signed: Record<string, string> = {};
+  for (const [key, entry] of Object.entries(attestations)) {
+    if (typeof entry !== "string" || !entry.trim()) {
+      throw new Error(`readiness.attestations.${key} must name who attested`);
+    }
+    signed[key] = entry;
+  }
+
+  return {
+    guestContractVersion: GUEST_CONTRACT_VERSION,
+    eventId: asString(root, "eventId", "readiness"),
+    namingPolicy: namingPolicy as NamingPolicy,
+    roleBased,
+    unattendedNamingPermitted: unattended,
+    calibrationStatus: calibrationStatus as CalibrationStatus,
+    disclosure,
+    blockingReasons: asStringArray(root, "blockingReasons", "readiness"),
+    attestations: signed,
+  };
+}
+
+/** True when the operator must confirm a name before it can air. */
+export function requiresOperatorConfirmation(readiness: IdentityReadiness): boolean {
+  return readiness.namingPolicy === "NAMED_ASSIST";
+}

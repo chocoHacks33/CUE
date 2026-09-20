@@ -69,6 +69,17 @@ def test_observer_socket_is_read_only(message: dict[str, object]) -> None:
         assert response["code"] == "OBSERVER_READ_ONLY"
 
 
+def test_control_socket_explains_invalid_and_cross_event_sessions() -> None:
+    test_client = client()
+    token = issue_session(test_client, ControlRole.DIRECTOR)
+    for event_id, presented in (("demo", "invalid-token"), ("another-event", token)):
+        with test_client.websocket_connect(f"/api/v1/events/{event_id}/control") as socket:
+            socket.send_json({"type": "control.authenticate", "token": presented})
+            response = socket.receive_json()
+            assert response["type"] == "control.error"
+            assert response["code"] == "INVALID_SESSION"
+
+
 def test_director_ack_is_the_only_step_that_sets_the_live_camera() -> None:
     test_client = client()
     token = issue_session(test_client, ControlRole.DIRECTOR)

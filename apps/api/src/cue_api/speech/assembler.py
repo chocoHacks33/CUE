@@ -80,11 +80,17 @@ class Assembler:
         self._audio_epoch = audio_epoch
         self._prefix = utterance_id_prefix
         self._counter = 0
+        # Post-flush duplicate guard: remember the signature of the last
+        # committed segment set so a literal-replay of the same is_final
+        # frame (a rare Deepgram re-broadcast, or a replay in tests) does
+        # not re-emit a second FinalUtterance.
+        self._last_flushed_signature: frozenset[tuple[Any, Any, str]] | None = None
         self._reset_buffer()
 
     def reset(self, new_epoch: int) -> None:
         """Drop in-flight buffer; subsequent messages must carry the new epoch."""
         self._audio_epoch = new_epoch
+        self._last_flushed_signature = None
         self._reset_buffer()
 
     def tick(self, now: float) -> list[Event]:
@@ -120,6 +126,15 @@ class Assembler:
             prov = self._provisional_text(transcript)
             if prov:
                 events.append(Provisional(text=prov))
+            return events
+
+        # Post-flush duplicate guard: if this is_final message carries the
+        # same segment key we just flushed and nothing new has arrived
+        # since, drop it entirely.
+        seg_key = (message.get("start"), message.get("duration"), transcript)
+        if (self._last_flushed_signature is not None
+                and not self._segments
+                and frozenset({seg_key}) <= self._last_flushed_signature):
             return events
 
         self._accumulate(message, transcript, words, now)
@@ -216,5 +231,8 @@ class Assembler:
             started_at=self._started_at,
             ended_at=self._ended_at,
         )
+        # Remember what we just flushed so an immediate literal-replay of
+        # the same is_final frame is not re-committed.
+        self._last_flushed_signature = frozenset(self._seg_keys) or None
         self._reset_buffer()
         return [event]

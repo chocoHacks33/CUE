@@ -3,8 +3,31 @@ from __future__ import annotations
 import pytest
 
 from cue_api.contracts import CameraId
-from cue_api.control import ControlError, ControlStore
-from cue_api.control_contracts import ControlMode, RenderAckRequest, RenderStatus
+from cue_api.control import ControlError, ControlSessionStore, ControlStore
+from cue_api.control_contracts import ControlMode, ControlRole, RenderAckRequest, RenderStatus
+
+
+class Clock:
+    def __init__(self) -> None:
+        self.now = 100.0
+
+    def __call__(self) -> float:
+        return self.now
+
+
+def test_control_sessions_expire_without_sleeping_and_stay_event_scoped() -> None:
+    clock = Clock()
+    sessions = ControlSessionStore(ttl_seconds=10, clock=clock)
+    token, _ = sessions.issue("event-a", ControlRole.DIRECTOR)
+    assert sessions.validate(token, "event-a").role is ControlRole.DIRECTOR
+    with pytest.raises(ControlError) as wrong_event:
+        sessions.validate(token, "event-b")
+    assert wrong_event.value.code == "INVALID_SESSION"
+
+    clock.now += 10
+    with pytest.raises(ControlError) as expired:
+        sessions.validate(token, "event-a")
+    assert expired.value.code == "SESSION_EXPIRED"
 
 
 def test_take_becomes_live_only_after_matching_render_ack() -> None:
