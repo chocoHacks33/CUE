@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import secrets
+from collections.abc import Callable
 from typing import Annotated
 
 from fastapi import FastAPI, Header, HTTPException, Path, Response, status
@@ -35,6 +36,7 @@ from cue_api.contracts import (
 from cue_api.control import ControlSessionStore, ControlStore
 from cue_api.control_socket import ControlHub, build_control_router, build_control_websocket
 from cue_api.guests import GuestRegistry, ObservationStore, build_guest_router
+from cue_api.guests.identity_evidence import IdentityEvidence, gather
 from cue_api.lifecycle import EventLifecycleCoordinator
 from cue_api.livekit_tokens import (
     LiveKitPublisherTokenIssuer,
@@ -65,6 +67,7 @@ def create_app(
     receiver_token_issuer: ReceiverTokenIssuer | None = None,
     guest_registry: GuestRegistry | None = None,
     observation_store: ObservationStore | None = None,
+    identity_evidence: Callable[[], IdentityEvidence] | None = None,
     admission_store: AdmissionStore | None = None,
     stage4_evidence_store: Stage4EvidenceStore | None = None,
 ) -> FastAPI:
@@ -554,6 +557,7 @@ def create_app(
             app_settings,
             registry,
             observations,
+            evidence=identity_evidence or gather,
             ensure_event_active=require_active_event,
         )
     )

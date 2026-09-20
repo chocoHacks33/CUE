@@ -248,6 +248,24 @@ class GalleryResponse(ContractModel):
     entries: list[GalleryEntry]
 
 
+class IdentityReadinessResponse(ContractModel):
+    """What identity is allowed to do, and what must be said about it.
+
+    D's panel shows `disclosure` whenever identity is in play. C passes
+    `role_based` to the director. `blocking_reasons` is why it is not more.
+    """
+
+    guest_contract_version: Literal["0.1.0"] = GUEST_CONTRACT_VERSION
+    event_id: str
+    naming_policy: Literal["NAMED_AUTO", "NAMED_ASSIST", "ROLE_BASED"]
+    role_based: bool
+    unattended_naming_permitted: bool
+    calibration_status: CalibrationStatus
+    disclosure: str
+    blocking_reasons: list[str]
+    attestations: dict[str, str] = Field(default_factory=dict)
+
+
 class GuestListResponse(ContractModel):
     guest_contract_version: Literal["0.1.0"] = GUEST_CONTRACT_VERSION
     event_id: str
