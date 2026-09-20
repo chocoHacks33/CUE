@@ -1,4 +1,8 @@
-# Person A Stage 4 preliminary handoff
+# Person A Stage 4 preliminary handoff (superseded)
+
+The integrated implementation is documented in
+[`stage-4-a-handoff.md`](stage-4-a-handoff.md). This file is retained only as
+the pre-Stage-3 integration record.
 
 Branch: `codex/person-a-stage-4-prep`
 

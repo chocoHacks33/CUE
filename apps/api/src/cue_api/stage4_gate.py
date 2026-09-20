@@ -10,6 +10,7 @@ pass before AUTO is actually enabled.
 from __future__ import annotations
 
 import math
+import threading
 from dataclasses import dataclass
 from enum import StrEnum
 from typing import Any
@@ -90,6 +91,44 @@ class TrialResult:
             latency_ms=None if latency is None else float(latency),
             detail=str(value.get("detail", "")),
         )
+
+
+class TrialConflictError(ValueError):
+    """Raised when a trial ID is reused for different evidence."""
+
+
+class Stage4EvidenceStore:
+    """Small event-scoped ledger for operator-attested Stage 4 evidence."""
+
+    def __init__(self, *, maximum_trials_per_event: int = 200) -> None:
+        if maximum_trials_per_event < 1:
+            raise ValueError("maximum_trials_per_event must be positive")
+        self._maximum_trials_per_event = maximum_trials_per_event
+        self._trials: dict[str, dict[str, TrialResult]] = {}
+        self._lock = threading.RLock()
+
+    def record(self, event_id: str, trial: TrialResult) -> bool:
+        """Record one trial; identical retries are idempotent."""
+        with self._lock:
+            event_trials = self._trials.setdefault(event_id, {})
+            previous = event_trials.get(trial.trial_id)
+            if previous is not None:
+                if previous != trial:
+                    raise TrialConflictError(
+                        f"trial ID {trial.trial_id!r} already has different evidence"
+                    )
+                return False
+            if len(event_trials) >= self._maximum_trials_per_event:
+                raise TrialConflictError("event has reached its Stage 4 trial limit")
+            event_trials[trial.trial_id] = trial
+            return True
+
+    def list(self, event_id: str) -> list[TrialResult]:
+        with self._lock:
+            return list(self._trials.get(event_id, {}).values())
+
+    def assess(self, event_id: str) -> Stage4Assessment:
+        return assess_stage4(self.list(event_id))
 
 
 @dataclass(frozen=True)
