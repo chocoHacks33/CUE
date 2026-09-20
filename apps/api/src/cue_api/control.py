@@ -4,6 +4,7 @@ import hashlib
 import secrets
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from cue_api.contracts import CameraId
@@ -416,8 +417,14 @@ class ControlSession:
 class ControlSessionStore:
     """Short-lived role-scoped control socket credentials stored only as hashes."""
 
-    def __init__(self, *, ttl_seconds: int = 300) -> None:
+    def __init__(
+        self,
+        *,
+        ttl_seconds: int = 300,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self._ttl_seconds = ttl_seconds
+        self._clock = clock
         self._sessions: dict[str, ControlSession] = {}
         self._lock = threading.Lock()
 
@@ -431,7 +438,7 @@ class ControlSessionStore:
             self._sessions[self._digest(token)] = ControlSession(
                 event_id=event_id,
                 role=role,
-                expires_at_monotonic_s=time.monotonic() + self._ttl_seconds,
+                expires_at_monotonic_s=self._clock() + self._ttl_seconds,
             )
         return token, self._ttl_seconds
 
@@ -440,7 +447,7 @@ class ControlSessionStore:
             session = self._sessions.get(self._digest(token))
             if session is None or session.event_id != event_id:
                 raise ControlError("INVALID_SESSION", "invalid control session")
-            if session.expires_at_monotonic_s <= time.monotonic():
+            if session.expires_at_monotonic_s <= self._clock():
                 self._sessions.pop(self._digest(token), None)
                 raise ControlError("SESSION_EXPIRED", "control session expired")
             return session
