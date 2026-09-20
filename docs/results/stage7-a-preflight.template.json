@@ -1,0 +1,28 @@
+{
+  "schemaVersion": 1,
+  "testedCommit": "REPLACE_WITH_FULL_GIT_COMMIT",
+  "releaseMode": "ROLE_BASED_ASSIST",
+  "stage6HandoffReviewed": false,
+  "venue": {
+    "assignedJudgingLocation": "REPLACE_WITH_CURRENT_ASSIGNED_LOCATION",
+    "announcementsCheckedAtUtc": "REPLACE_WITH_TIMEZONE_AWARE_ISO_8601_TIME",
+    "evidence": "REPLACE_WITH_PRIVATE_EVIDENCE_REFERENCE",
+    "powerAccessConfirmed": false,
+    "allDeviceChargersPresent": false,
+    "cableTripHazardPlanConfirmed": false
+  },
+  "network": {
+    "apiBaseUrl": "REPLACE_WITH_CURRENT_API_URL",
+    "eventId": "hackmit-2026"
+  },
+  "reconnect": {
+    "cameraHostReconnectObserved": false,
+    "returnsToAssist": false,
+    "evidence": "REPLACE_WITH_PRIVATE_RECONNECT_EVIDENCE"
+  },
+  "acknowledgements": {
+    "exactCommitConfirmed": false,
+    "noUnverifiedHardwareClaims": true,
+    "limitationsUpdatedIfNeeded": false
+  }
+}
