@@ -306,12 +306,14 @@ def test_on_reconnect_clears_queue_and_bumps_mode():
         "channel": {"alternatives": [{"transcript": "Please welcome Sarah Tan."}]},
     }, now=1.5)
     assert all(r.action != "TAKE" for r in emitted)
-    # After RESUME_AUTO, the next utterance can TAKE.
+    # After RESUME_AUTO, the next utterance can TAKE. Give this utterance
+    # a distinct (start, duration) — otherwise the assembler's post-flush
+    # duplicate guard rightly treats it as a literal replay of the first.
     lane.on_manual("RESUME_AUTO", now=1.6)
     lane.on_camera_state(_cams(), now=2.0)
     lane.on_transcript_message({
         "audio_epoch": 2, "type": "Results",
-        "start": 0.0, "duration": 1.0,
+        "start": 2.0, "duration": 1.0,
         "is_final": True, "speech_final": True,
         "channel": {"alternatives": [{"transcript": "Please welcome Sarah Tan."}]},
     }, now=2.0)
