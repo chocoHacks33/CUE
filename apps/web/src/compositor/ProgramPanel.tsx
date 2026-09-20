@@ -3,6 +3,7 @@ import {
   type CameraId,
   type ControlServerMessage,
   type ControlSnapshot,
+  type IdentityReadiness,
   type OperatorMode,
   type ProgramSource,
   type ReceiverReadiness,
@@ -74,6 +75,8 @@ export interface ProgramPanelProps {
   apiBaseUrl: string;
   /** Empty string keeps the control link off; the compositor then runs in local manual mode. */
   producerSecret: string;
+  /** B's per-request verdict on what identity may do, with the disclosure the audience is owed. Null when unread. */
+  identityReadiness: IdentityReadiness | null;
   readiness: ReceiverReadiness | null;
   getSourceElement: (cameraId: CameraId) => HTMLVideoElement | null;
   getMasterAudioTrack: () => MediaStreamTrack | null;
@@ -149,6 +152,7 @@ export function ProgramPanel({
   connected,
   apiBaseUrl,
   producerSecret,
+  identityReadiness,
   readiness,
   getSourceElement,
   getMasterAudioTrack,
@@ -886,6 +890,7 @@ export function ProgramPanel({
       rendererId,
       rendererGeneration,
       userAgent: navigator.userAgent,
+      identityReadiness,
       gates: { cut: CUT_GATE, failover: FAILOVER_GATE, soak: SOAK_GATE },
       cuts: { gate: cutResult, samples: cutSamples },
       failovers: { gate: failoverResult, samples: failovers },
@@ -951,6 +956,11 @@ export function ProgramPanel({
           {linkWanted
             ? `control link ${link.status}${link.snapshot ? ` · backend ${link.snapshot.mode} rev ${link.snapshot.modeRevision} · live ${link.snapshot.liveCameraId ?? "slate"}` : ""}`
             : "control link off: enter the producer secret to hand authority to the backend"}
+        </div>
+        <div className="mode-sub">
+          {identityReadiness
+            ? `naming ${identityReadiness.namingPolicy}${identityReadiness.roleBased ? " (cameras by role)" : ""}${identityReadiness.unattendedNamingPermitted ? " · unattended naming permitted" : " · operator confirms any name"} · ${identityReadiness.disclosure}`
+            : "naming policy unknown: B's readiness verdict not read yet, treat names as unavailable"}
         </div>
       </div>
 

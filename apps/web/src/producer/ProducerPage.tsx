@@ -3,8 +3,8 @@ import {
   CAMERA_IDS,
   type CameraBinding,
   type CameraId,
+  type IdentityReadiness,
   type ObservationSnapshot,
-  parseObservationSnapshot,
   parsePublisherMetadata,
   type ProgramSource,
   type ReceiverReadiness,
@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ProgramPanel } from "../compositor/ProgramPanel";
 import { RecordingTest } from "../recording/RecordingTest";
 import { describeEvidence, type EvidenceLine } from "./evidenceView";
+import { fetchIdentityReadiness, fetchObservations } from "./guestApi";
 import { listCameraBindings } from "./pairingApi";
 import { PairingPanel } from "./PairingPanel";
 import { buildReadiness } from "./readiness";
@@ -111,6 +112,7 @@ export function ProducerPage() {
   const [producerSecret, setProducerSecret] = useState("");
   const [evidence, setEvidence] = useState<ObservationSnapshot | null>(null);
   const [evidenceError, setEvidenceError] = useState<string | null>(null);
+  const [identityReadiness, setIdentityReadiness] = useState<IdentityReadiness | null>(null);
   const [eventId, setEventId] = useState("hackmit-demo");
   const [displayName, setDisplayName] = useState("Person D");
   const [status, setStatus] = useState<ReceiverStatus>("idle");
@@ -211,12 +213,7 @@ export function ProducerPage() {
     let failures = 0;
     const poll = async () => {
       try {
-        const response = await fetch(
-          `${apiBaseUrl.replace(/\/+$/, "")}/api/v1/guests/observations?event_id=${encodeURIComponent(connectedEventRef.current)}`,
-          { headers: { "X-CUE-Bootstrap-Secret": bootstrapSecret.trim(), "ngrok-skip-browser-warning": "1" } },
-        );
-        if (!response.ok) throw new Error(`observations ${response.status}`);
-        const snapshot = parseObservationSnapshot(await response.json());
+        const snapshot = await fetchObservations(apiBaseUrl, bootstrapSecret.trim(), connectedEventRef.current);
         if (!cancelled) {
           setEvidence(snapshot);
           setEvidenceError(null);
@@ -231,6 +228,29 @@ export function ProducerPage() {
     };
     void poll();
     const id = window.setInterval(() => void poll(), 500);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, [apiBaseUrl, bootstrapSecret, status]);
+
+  // Naming policy and disclosure: B computes the verdict per request (Stage 4 exit gate). Slow poll, never cached here.
+  useEffect(() => {
+    if (status !== "connected" || !bootstrapSecret.trim()) {
+      setIdentityReadiness(null);
+      return;
+    }
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const verdict = await fetchIdentityReadiness(apiBaseUrl, bootstrapSecret.trim(), connectedEventRef.current);
+        if (!cancelled) setIdentityReadiness(verdict);
+      } catch {
+        if (!cancelled) setIdentityReadiness(null);
+      }
+    };
+    void poll();
+    const id = window.setInterval(() => void poll(), 5000);
     return () => {
       cancelled = true;
       window.clearInterval(id);
@@ -1093,6 +1113,7 @@ export function ProducerPage() {
             connected={status === "connected" || status === "reconnecting"}
             apiBaseUrl={apiBaseUrl}
             producerSecret={producerSecret}
+            identityReadiness={identityReadiness}
             readiness={readiness}
             getSourceElement={getSourceElement}
             getMasterAudioTrack={getMasterAudioTrack}
