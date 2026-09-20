@@ -7,6 +7,7 @@ import {
   pickRecordingMimeType,
   RECORDING_MIME_CANDIDATES,
   recordingFileName,
+  stillFileName,
   totalBytes,
 } from "./recorderSupport";
 
@@ -42,6 +43,12 @@ describe("file naming", () => {
     expect(recordingFileName("CAM-HOST + master audio", "video/webm", when)).toBe(
       "cue-cam-host-master-audio-20260919-140509.webm",
     );
+  });
+
+  it("names a programme still by event, on-air source and time", () => {
+    const when = new Date(2026, 8, 20, 9, 30, 1);
+    expect(stillFileName("hackmit-demo", "CAM-GUEST", when)).toBe("cue-still-hackmit-demo-cam-guest-20260920-093001.png");
+    expect(stillFileName("", "SLATE", when)).toBe("cue-still-x-slate-20260920-093001.png");
   });
 });
 
