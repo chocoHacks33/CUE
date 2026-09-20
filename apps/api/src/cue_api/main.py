@@ -35,6 +35,7 @@ from cue_api.contracts import (
 )
 from cue_api.control import ControlSessionStore, ControlStore
 from cue_api.control_socket import ControlHub, build_control_router, build_control_websocket
+from cue_api.desk.routes import install_desk  # D's desk UI adapter: /ws and the feed route
 from cue_api.guests import GuestRegistry, ObservationStore, build_guest_router
 from cue_api.guests.identity_evidence import IdentityEvidence, gather
 from cue_api.lifecycle import EventLifecycleCoordinator
@@ -574,6 +575,15 @@ def create_app(
     app.add_api_websocket_route(
         "/api/v1/events/{event_id}/control",
         build_control_websocket(control_store, control_sessions, control_hub, readiness_store),
+    )
+    install_desk(  # D's desk UI: read-only translation; takes and modes stay on the routes above
+        app,
+        control_store=control_store,
+        readiness=readiness_store,
+        admissions=admissions,
+        receiver_issuer=receiver_issuer,
+        livekit_url=app_settings.livekit_url,
+        require_producer=require_producer,
     )
     app.state.control_store = control_store
     app.state.control_sessions = control_sessions

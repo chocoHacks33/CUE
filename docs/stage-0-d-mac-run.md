@@ -136,6 +136,10 @@ Then the physical rows in `docs/results/d-stage7-morning.md`, and the live segme
 - A 20-minute soak if time allows, else a 5-minute one, exported; note which.
 - Play the recording outside the app before the pitch.
 
+## Desk UI (operator page from cue-desk-ui)
+
+`http://localhost:5173/desk.html` after `npm run dev:web`; enter the producer secret once. Captions and decisions appear when C's live lane runs with `--desk-feed http://127.0.0.1:8000`. Details: `docs/DESK-UI.md`.
+
 ## Stage 4: measurements and failure drills
 
 All of this needs the three Windows webcams, A's mic and the worker running. Export files and recordings are private; fill `docs/results/d-stage4-check.md` from them.
